@@ -26,6 +26,8 @@ import datasets
 import networks
 from IPython import embed
 
+from nonechucks import SafeDataset
+
 
 class Trainer:
 
@@ -134,15 +136,16 @@ class Trainer:
     num_train_samples = len(train_filenames)
     self.num_total_steps = num_train_samples // self.opt.batch_size * self.opt.num_epochs
 
-    train_dataset = self.dataset(
-        self.opt.data_path,
-        train_filenames,
-        self.opt.height,
-        self.opt.width,
-        self.opt.frame_ids,
-        4,
-        is_train=True,
-        img_ext=img_ext)
+    train_dataset = SafeDataset(
+        self.dataset(
+            self.opt.data_path,
+            train_filenames,
+            self.opt.height,
+            self.opt.width,
+            self.opt.frame_ids,
+            4,
+            is_train=True,
+            img_ext=img_ext))
     self.train_loader = DataLoader(
         train_dataset,
         self.opt.batch_size,
@@ -150,15 +153,16 @@ class Trainer:
         num_workers=self.opt.num_workers,
         pin_memory=True,
         drop_last=True)
-    val_dataset = self.dataset(
-        self.opt.data_path,
-        val_filenames,
-        self.opt.height,
-        self.opt.width,
-        self.opt.frame_ids,
-        4,
-        is_train=False,
-        img_ext=img_ext)
+    val_dataset = SafeDataset(
+        self.dataset(
+            self.opt.data_path,
+            val_filenames,
+            self.opt.height,
+            self.opt.width,
+            self.opt.frame_ids,
+            4,
+            is_train=False,
+            img_ext=img_ext))
     self.val_loader = DataLoader(
         val_dataset,
         self.opt.batch_size,
