@@ -24,6 +24,7 @@ from layers import *
 
 import datasets
 import networks
+import losses
 from IPython import embed
 
 from nonechucks import SafeDataset
@@ -177,7 +178,7 @@ class Trainer:
       self.writers[mode] = SummaryWriter(os.path.join(self.log_path, mode))
 
     if not self.opt.no_ssim:
-      self.ssim = SSIM()
+      self.ssim = losses.SSIM()
       self.ssim.to(self.device)
 
     self.backproject_depth = {}
@@ -536,7 +537,7 @@ class Trainer:
 
       mean_disp = disp.mean(2, True).mean(3, True)
       norm_disp = disp / (mean_disp + 1e-7)
-      smooth_loss = get_smooth_loss(norm_disp, color)
+      smooth_loss = losses.inverse_depth_smoothness_loss(norm_disp, color)
 
       loss += self.opt.disparity_smoothness * smooth_loss / (2**scale)
       total_loss += loss
