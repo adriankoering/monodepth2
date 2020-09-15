@@ -7,6 +7,7 @@
 from __future__ import absolute_import, division, print_function
 
 import numpy as np
+import matplotlib.pyplot as plt
 import time
 
 import torch
@@ -259,7 +260,7 @@ class Trainer:
 
   def process_batch(self, inputs):
     """Pass a minibatch through the network and generate images and losses
-        """
+    """
     for key, ipt in inputs.items():
       inputs[key] = ipt.to(self.device)
 
@@ -594,8 +595,7 @@ class Trainer:
     for l, v in losses.items():
       writer.add_scalar("{}".format(l), v, self.step)
 
-    for j in range(min(4,
-                       self.opt.batch_size)):  # write a maxmimum of four images
+    for j in range(min(4, self.opt.batch_size)):  # write at most four images
       for s in self.opt.scales:
         for frame_id in self.opt.frame_ids:
           writer.add_image("color_{}_{}/{}".format(frame_id, s, j),
@@ -604,8 +604,11 @@ class Trainer:
             writer.add_image("color_pred_{}_{}/{}".format(frame_id, s, j),
                              outputs[("color", frame_id, s)][j].data, self.step)
 
-        writer.add_image("disp_{}/{}".format(s, j),
-                         normalize_image(outputs[("disp", s)][j]), self.step)
+        disp = outputs[("disp", s)][j]
+        fig = plt.figure(figsize=(10, 4))
+        plt.imshow(kornia.utils.tensor_to_image(disp))
+        plt.colorbar()
+        writer.add_figure(f"disp_{s}/{j}", fig, self.step)
 
         if self.opt.predictive_mask:
           for f_idx, frame_id in enumerate(self.opt.frame_ids[1:]):
