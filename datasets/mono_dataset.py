@@ -36,7 +36,7 @@ class MonoDataset(data.Dataset):
         width
         frame_idxs
         num_scales
-        is_train
+        train
         img_ext
     """
 
@@ -47,7 +47,7 @@ class MonoDataset(data.Dataset):
                width,
                frame_idxs,
                num_scales,
-               is_train=False,
+               train=False,
                img_ext='.jpg'):
     super(MonoDataset, self).__init__()
 
@@ -60,7 +60,7 @@ class MonoDataset(data.Dataset):
 
     self.frame_idxs = frame_idxs
 
-    self.is_train = is_train
+    self.train = train
     self.img_ext = img_ext
 
     self.loader = pil_loader
@@ -138,8 +138,8 @@ class MonoDataset(data.Dataset):
     """
     inputs = {}
 
-    do_color_aug = self.is_train and random.random() > 0.5
-    do_flip = self.is_train and random.random() > 0.5
+    do_color_aug = self.train and random.random() > 0.5
+    do_flip = self.train and random.random() > 0.5
 
     line = self.filenames[index].split()
     folder = line[0]

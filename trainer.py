@@ -143,16 +143,17 @@ class Trainer:
             self.opt.height,
             self.opt.width,
             self.opt.frame_ids,
-            4,
-            is_train=True,
+            num_scales=4,
+            train=True,
             img_ext=img_ext))
     self.train_loader = DataLoader(
         train_dataset,
         self.opt.batch_size,
-        True,
+        shuffle=True,
         num_workers=self.opt.num_workers,
         pin_memory=True,
         drop_last=True)
+
     val_dataset = SafeDataset(
         self.dataset(
             self.opt.data_path,
@@ -160,13 +161,13 @@ class Trainer:
             self.opt.height,
             self.opt.width,
             self.opt.frame_ids,
-            4,
-            is_train=False,
+            num_scales=4,
+            train=False,
             img_ext=img_ext))
     self.val_loader = DataLoader(
         val_dataset,
         self.opt.batch_size,
-        True,
+        shuffle=True,
         num_workers=self.opt.num_workers,
         pin_memory=True,
         drop_last=True)
