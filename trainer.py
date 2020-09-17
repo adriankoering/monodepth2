@@ -430,6 +430,7 @@ class Trainer:
         outputs[("color", frame_id, scale)] = F.grid_sample(
             inputs[("color", frame_id, source_scale)],
             outputs[("sample", frame_id, scale)],
+            align_corners=True,
             padding_mode="border")
 
         if not self.opt.disable_automasking:
