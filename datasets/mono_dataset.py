@@ -89,31 +89,30 @@ class MonoDataset(data.Dataset):
     self.load_depth = self.check_depth()
 
   def preprocess(self, inputs, color_aug):
-    """Resize colour images to the required scales and augment if required
+    """ Resize colour images to the required scales and augment if required
 
-        We create the color_aug object in advance and apply the same augmentation to all
-        images in this item. This ensures that all images input to the pose network receive the
-        same augmentation.
-        """
-    for k in list(inputs):
-      frame = inputs[k]
-      if "color" in k:
-        n, im, i = k
-        for i in range(self.num_scales):
-          inputs[(n, im, i)] = self.resize[i](inputs[(n, im, i - 1)])
+        We create the color_aug object in advance and apply the same augmentation
+        to all images in this item. This ensures that all images input to the
+        pose network receive the same augmentation.
+    """
+    # create downsampled images based on original resolution
+    for (n, idx, _), frame in inputs.items():
+      if "color" == n:
+        for s in range(self.num_scales):
+          # starting at native resolution, resize images 'pyramid' style
+          inputs[(n, idx, s)] = self.resize[s](inputs[(n, idx, s - 1)])
 
-    for k in list(inputs):
-      f = inputs[k]
-      if "color" in k:
-        n, im, i = k
-        inputs[(n, im, i)] = self.to_tensor(f)
-        inputs[(n + "_aug", im, i)] = self.to_tensor(color_aug(f))
+    # create augmented images from downsampled images
+    for (n, idx, s), f in inputs.items():
+      if "color" == n:
+        inputs[(n, idx, s)] = self.to_tensor(f)
+        inputs[(n + "_aug", idx, s)] = self.to_tensor(color_aug(f))
 
   def __len__(self):
     return len(self.filenames)
 
   def __getitem__(self, index):
-    """Returns a single training item from the dataset as a dictionary.
+    """ Returns a single training item from the dataset as a dictionary.
 
         Values correspond to torch tensors.
         Keys in the dictionary are either strings or tuples:
@@ -135,7 +134,7 @@ class MonoDataset(data.Dataset):
             1       images resized to (self.width // 2, self.height // 2)
             2       images resized to (self.width // 4, self.height // 4)
             3       images resized to (self.width // 8, self.height // 8)
-        """
+    """
     inputs = {}
 
     do_color_aug = self.is_train and random.random() > 0.5
