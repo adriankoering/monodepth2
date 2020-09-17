@@ -9,7 +9,7 @@ from __future__ import absolute_import, division, print_function
 import os
 import skimage.transform
 import numpy as np
-import PIL.Image as pil
+from PIL import Image
 
 from kitti_utils import generate_depth_map
 from .mono_dataset import MonoDataset
@@ -45,7 +45,7 @@ class KITTIDataset(MonoDataset):
     color = self.loader(self.get_image_path(folder, frame_index, side))
 
     if do_flip:
-      color = color.transpose(pil.FLIP_LEFT_RIGHT)
+      color = color.transpose(Image.FLIP_LEFT_RIGHT)
 
     return color
 
@@ -121,8 +121,8 @@ class KITTIDepthDataset(KITTIDataset):
         self.data_path, folder,
         "proj_depth/groundtruth/image_0{}".format(self.side_map[side]), f_str)
 
-    depth_gt = pil.open(depth_path)
-    depth_gt = depth_gt.resize(self.full_res_shape, pil.NEAREST)
+    depth_gt = Image.open(depth_path)
+    depth_gt = depth_gt.resize(self.full_res_shape, Image.NEAREST)
     depth_gt = np.array(depth_gt).astype(np.float32) / 256
 
     if do_flip:
