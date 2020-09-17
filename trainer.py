@@ -199,29 +199,27 @@ class Trainer:
         "da/a3"
     ]
 
-    print("Using split:\n  ", self.opt.split)
-    print("There are {:d} training items and {:d} validation items\n".format(
-        len(train_dataset), len(val_dataset)))
+    print(f"Using split: {self.opt.split}")
+    print(f"Training: {len(train_dataset)}, Validation: {len(val_dataset)}")
 
     self.save_opts()
 
   def set_train(self):
-    """Convert all models to training mode
-        """
+    """ Convert all models to training mode
+    """
     for m in self.models.values():
       m.train()
 
   def set_eval(self):
-    """Convert all models to testing/evaluation mode
-        """
+    """ Convert all models to testing/evaluation mode
+    """
     for m in self.models.values():
       m.eval()
 
   def train(self):
-    """Run the entire training pipeline
-        """
-    self.epoch = 0
-    self.step = 0
+    """ Run the entire training pipeline
+    """
+    self.epoch = self.step = 0
     self.start_time = time.time()
     for self.epoch in range(self.opt.num_epochs):
       self.run_epoch()
@@ -229,8 +227,8 @@ class Trainer:
         self.save_model()
 
   def run_epoch(self):
-    """Run a single epoch of training and validation
-        """
+    """ Run a single epoch of training and validation
+    """
     print("Training")
     self.set_train()
 
@@ -264,7 +262,7 @@ class Trainer:
     self.model_lr_scheduler.step()
 
   def process_batch(self, inputs):
-    """Pass a minibatch through the network and generate images and losses
+    """ Pass a minibatch through the network and generate images and losses
     """
     for key, ipt in inputs.items():
       inputs[key] = ipt.to(self.device)
@@ -299,8 +297,8 @@ class Trainer:
     return outputs, losses
 
   def predict_poses(self, inputs, features):
-    """Predict poses between input frames for monocular sequences.
-        """
+    """ Predict poses between input frames for monocular sequences.
+    """
     outputs = {}
     if self.num_pose_frames == 2:
       # In this setting, we compute the pose to each source frame via a
@@ -362,8 +360,8 @@ class Trainer:
     return outputs
 
   def val(self):
-    """Validate the model on a single minibatch
-        """
+    """ Validate the model on a single minibatch
+    """
     self.set_eval()
     try:
       inputs = self.val_iter.next()
@@ -383,9 +381,9 @@ class Trainer:
     self.set_train()
 
   def generate_images_pred(self, inputs, outputs):
-    """Generate the warped (reprojected) color images for a minibatch.
+    """ Generate the warped (reprojected) color images for a minibatch.
         Generated images are saved into the `outputs` dictionary.
-        """
+    """
     for scale in self.opt.scales:
       disp = outputs[("disp", scale)]
       if self.opt.v1_multiscale:
@@ -439,8 +437,8 @@ class Trainer:
               inputs[("color", frame_id, source_scale)]
 
   def compute_reprojection_loss(self, pred, target):
-    """Computes reprojection loss between a batch of predicted and target images
-        """
+    """ Computes reprojection loss between a batch of predicted and target images
+    """
     abs_diff = torch.abs(target - pred)
     l1_loss = abs_diff.mean(1, True)
 
@@ -453,9 +451,9 @@ class Trainer:
     return reprojection_loss
 
   def compute_losses(self, inputs, outputs):
-    """Compute the reprojection and smoothness losses for a minibatch
-        """
     losses = {}
+    """ Compute the reprojection and smoothness losses for a minibatch
+    """
     total_loss = 0
 
     for scale in self.opt.scales:
@@ -547,12 +545,12 @@ class Trainer:
     losses["loss"] = total_loss
     return losses
 
-  def compute_depth_losses(self, inputs, outputs, losses):
-    """Compute depth metrics, to allow monitoring during training
+  def compute_depth_losses(self, inputs, outputs, loss_dict):
+    """ Compute depth metrics, to allow monitoring during training
 
         This isn't particularly accurate as it averages over the entire batch,
         so is only used to give an indication of validation performance
-        """
+    """
     depth_pred = outputs[("depth", 0, 0)]
     depth_pred = torch.clamp(
         F.interpolate(
@@ -580,8 +578,8 @@ class Trainer:
       losses[metric] = np.array(depth_errors[i].cpu())
 
   def log_time(self, batch_idx, duration, loss):
-    """Print a logging statement to the terminal
-        """
+    """ Print a logging statement to the terminal
+    """
     samples_per_sec = self.opt.batch_size / duration
     time_sofar = time.time() - self.start_time
     training_time_left = (self.num_total_steps / self.step -
@@ -593,9 +591,9 @@ class Trainer:
                             sec_to_hm_str(time_sofar),
                             sec_to_hm_str(training_time_left)))
 
-  def log(self, mode, inputs, outputs, losses):
-    """Write an event to the tensorboard events file
-        """
+  def log(self, mode, inputs, outputs, loss_dict):
+    """ Write an event to the tensorboard events file
+    """
     writer = self.writers[mode]
     for l, v in losses.items():
       writer.add_scalar("{}".format(l), v, self.step)
@@ -629,8 +627,8 @@ class Trainer:
               self.step)
 
   def save_opts(self):
-    """Save options to disk so we know what we ran this experiment with
-        """
+    """ Save options to disk so we know what we ran this experiment with
+    """
     models_dir = os.path.join(self.log_path, "models")
     if not os.path.exists(models_dir):
       os.makedirs(models_dir)
@@ -640,8 +638,8 @@ class Trainer:
       json.dump(to_save, f, indent=2)
 
   def save_model(self):
-    """Save model weights to disk
-        """
+    """ Save model weights to disk
+    """
     save_folder = os.path.join(self.log_path, "models",
                                "weights_{}".format(self.epoch))
     if not os.path.exists(save_folder):
@@ -661,8 +659,8 @@ class Trainer:
     torch.save(self.model_optimizer.state_dict(), save_path)
 
   def load_model(self):
-    """Load model(s) from disk
-        """
+    """ Load model(s) from disk
+    """
     self.opt.load_weights_folder = os.path.expanduser(
         self.opt.load_weights_folder)
 
