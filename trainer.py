@@ -236,10 +236,10 @@ class Trainer:
 
       before_op_time = time.time()
 
-      outputs, losses = self.process_batch(inputs)
+      outputs, loss_dict = self.process_batch(inputs)
 
       self.model_optimizer.zero_grad()
-      losses["loss"].backward()
+      loss_dict["loss"].backward()
       self.model_optimizer.step()
 
       duration = time.time() - before_op_time
@@ -249,12 +249,12 @@ class Trainer:
       late_phase = self.step % 2000 == 0
 
       if early_phase or late_phase:
-        self.log_time(batch_idx, duration, losses["loss"].cpu().data)
+        self.log_time(batch_idx, duration, loss_dict["loss"].item())
 
         if "depth_gt" in inputs:
-          self.compute_depth_losses(inputs, outputs, losses)
+          self.compute_depth_losses(inputs, outputs, loss_dict)
 
-        self.log("train", inputs, outputs, losses)
+        self.log("train", inputs, outputs, loss_dict)
         self.val()
 
       self.step += 1
@@ -292,9 +292,9 @@ class Trainer:
       outputs.update(self.predict_poses(inputs, features))
 
     self.generate_images_pred(inputs, outputs)
-    losses = self.compute_losses(inputs, outputs)
+    loss_dict = self.compute_losses(inputs, outputs)
 
-    return outputs, losses
+    return outputs, loss_dict
 
   def predict_poses(self, inputs, features):
     """ Predict poses between input frames for monocular sequences.
@@ -370,13 +370,13 @@ class Trainer:
       inputs = self.val_iter.next()
 
     with torch.no_grad():
-      outputs, losses = self.process_batch(inputs)
+      outputs, loss_dict = self.process_batch(inputs)
 
       if "depth_gt" in inputs:
-        self.compute_depth_losses(inputs, outputs, losses)
+        self.compute_depth_losses(inputs, outputs, loss_dict)
 
-      self.log("val", inputs, outputs, losses)
-      del inputs, outputs, losses
+      self.log("val", inputs, outputs, loss_dict)
+      del inputs, outputs, loss_dict
 
     self.set_train()
 
@@ -451,9 +451,9 @@ class Trainer:
     return reprojection_loss
 
   def compute_losses(self, inputs, outputs):
-    losses = {}
     """ Compute the reprojection and smoothness losses for a minibatch
     """
+    loss_dict = {}
     total_loss = 0
 
     for scale in self.opt.scales:
@@ -539,11 +539,11 @@ class Trainer:
 
       loss += self.opt.disparity_smoothness * smooth_loss / (2**scale)
       total_loss += loss
-      losses["loss/{}".format(scale)] = loss
+      loss_dict[f"loss/{scale}"] = loss
 
     total_loss /= self.num_scales
-    losses["loss"] = total_loss
-    return losses
+    loss_dict["loss"] = total_loss
+    return loss_dict
 
   def compute_depth_losses(self, inputs, outputs, loss_dict):
     """ Compute depth metrics, to allow monitoring during training
@@ -575,7 +575,7 @@ class Trainer:
     depth_errors = compute_depth_errors(depth_gt, depth_pred)
 
     for i, metric in enumerate(self.depth_metric_names):
-      losses[metric] = np.array(depth_errors[i].cpu())
+      loss_dict[metric] = np.array(depth_errors[i].cpu())
 
   def log_time(self, batch_idx, duration, loss):
     """ Print a logging statement to the terminal
@@ -595,7 +595,7 @@ class Trainer:
     """ Write an event to the tensorboard events file
     """
     writer = self.writers[mode]
-    for l, v in losses.items():
+    for l, v in loss_dict.items():
       writer.add_scalar("{}".format(l), v, self.step)
 
     for j in range(min(4, self.opt.batch_size)):  # write at most four images
