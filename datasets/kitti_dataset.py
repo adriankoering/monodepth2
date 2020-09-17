@@ -62,18 +62,15 @@ class KITTIRAWDataset(KITTIDataset):
     super().__init__(*args, **kwargs)
 
   def get_image_path(self, folder, frame_index, side):
-    f_str = "{:010d}{}".format(frame_index, self.img_ext)
-    image_path = os.path.join(self.data_path, folder,
-                              "image_0{}/data".format(self.side_map[side]),
-                              f_str)
-    return image_path
+    fname = f"{frame_index:010d}{self.img_ext}"
+    dir = self.data_path / folder / f"image_0{self.side_map[side]}/data"
+    return dir / fname
 
   def get_depth(self, folder, frame_index, side, do_flip):
     calib_path = os.path.join(self.data_path, folder.split("/")[0])
 
-    velo_filename = os.path.join(
-        self.data_path, folder,
-        "velodyne_points/data/{:010d}.bin".format(int(frame_index)))
+    velo_dir = self.data_path / folder / "velodyne_points/data"
+    velo_filename = velo_dir / f"{int(frame_index):010d}.bin"
 
     depth_gt = generate_depth_map(calib_path, velo_filename,
                                   self.side_map[side])
@@ -98,11 +95,9 @@ class KITTIOdomDataset(KITTIDataset):
     super().__init__(*args, **kwargs)
 
   def get_image_path(self, folder, frame_index, side):
-    f_str = "{:06d}{}".format(frame_index, self.img_ext)
-    image_path = os.path.join(self.data_path,
-                              "sequences/{:02d}".format(int(folder)),
-                              "image_{}".format(self.side_map[side]), f_str)
-    return image_path
+    fname = f"{frame_index:06d}{self.img_ext}"
+    dir = self.data_path / f"sequences/{int(folder):02d}" / f"image_{self.side_map[side]}"
+    return dir / fname
 
 
 class KITTIDepthDataset(KITTIDataset):
@@ -113,17 +108,15 @@ class KITTIDepthDataset(KITTIDataset):
     super().__init__(*args, **kwargs)
 
   def get_image_path(self, folder, frame_index, side):
-    f_str = "{:010d}{}".format(frame_index, self.img_ext)
-    image_path = os.path.join(self.data_path, folder,
-                              "image_0{}/data".format(self.side_map[side]),
-                              f_str)
-    return image_path
+    fname = f"{frame_index:010d}{self.img_ext}"
+    dir = self.data_path / folder / f"image_0{self.side_map[side]}/data"
+    return dir / fname
 
   def get_depth(self, folder, frame_index, side, do_flip):
-    f_str = "{:010d}.png".format(frame_index)
-    depth_path = os.path.join(
-        self.data_path, folder,
-        "proj_depth/groundtruth/image_0{}".format(self.side_map[side]), f_str)
+    fname = f"{frame_index:010d}.png"
+    dir = self.data_path / folder / f"proj_depth/groundtruth/image_0{self.side_map[side]}"
+
+    depth_path = dir / fname
 
     depth_gt = Image.open(depth_path)
     depth_gt = depth_gt.resize(self.full_res_shape, Image.NEAREST)

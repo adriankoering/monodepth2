@@ -6,6 +6,7 @@
 
 from __future__ import absolute_import, division, print_function
 
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -127,11 +128,9 @@ class Trainer:
     }
     self.dataset = datasets_dict[self.opt.dataset]
 
-    fpath = os.path.join(
-        os.path.dirname(__file__), "splits", self.opt.split, "{}_files.txt")
-
-    train_filenames = readlines(fpath.format("train"))
-    val_filenames = readlines(fpath.format("val"))
+    fpath = Path(os.path.dirname(__file__)) / "splits" / self.opt.split
+    train_filenames = readlines(fpath / "train_files.txt")
+    val_filenames = readlines(fpath / "val_files.txt")
     img_ext = '.png' if self.opt.png else '.jpg'
 
     num_train_samples = len(train_filenames)

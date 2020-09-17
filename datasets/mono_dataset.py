@@ -6,6 +6,7 @@
 
 from __future__ import absolute_import, division, print_function
 
+from pathlib import Path
 import os
 import random
 import numpy as np
@@ -50,7 +51,7 @@ class MonoDataset(data.Dataset):
                img_ext='.jpg'):
     super(MonoDataset, self).__init__()
 
-    self.data_path = data_path
+    self.data_path = Path(data_path)
     self.filenames = filenames
     self.height = height
     self.width = width
