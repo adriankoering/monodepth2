@@ -23,9 +23,13 @@ class KITTIDataset(MonoDataset):
     super().__init__(*args, **kwargs)
 
     # NOTE: Make sure your intrinsics matrix is *normalized* by the original image size
-    self.K = np.array(
-        [[0.58, 0, 0.5, 0], [0, 1.92, 0.5, 0], [0, 0, 1, 0], [0, 0, 0, 1]],
-        dtype=np.float32)
+    # (its later scaled by image resolution)
+    # yapf: disable
+    self.K = np.array([[0.58,    0, 0.5, 0],
+                       [   0, 1.92, 0.5, 0],
+                       [   0,    0,   1, 0],
+                       [   0,    0,   0, 1]], dtype=np.float32)
+    # yapf: enable
 
     self.full_res_shape = (1242, 375)
     self.side_map = {"2": 2, "3": 3, "l": 2, "r": 3}

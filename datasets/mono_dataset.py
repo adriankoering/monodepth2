@@ -181,17 +181,17 @@ class MonoDataset(data.Dataset):
     else:
       color_aug = (lambda x: x)
 
-    self.preprocess(inputs, color_aug)
+    self.preprocess(inputs, color_aug)  # downsample and augment images
 
+    # remove native resolution from inputs
     for i in self.frame_idxs:
       del inputs[("color", i, -1)]
       del inputs[("color_aug", i, -1)]
 
     if self.load_depth:
       depth_gt = self.get_depth(folder, frame_index, side, do_flip)
-      inputs["depth_gt"] = np.expand_dims(depth_gt, 0)
-      inputs["depth_gt"] = torch.from_numpy(inputs["depth_gt"].astype(
-          np.float32))
+      depth_gt = np.expand_dims(depth_gt, 0).astype(np.float32)
+      inputs["depth_gt"] = torch.from_numpy(depth_gt)
 
     if "s" in self.frame_idxs:
       stereo_T = np.eye(4, dtype=np.float32)
