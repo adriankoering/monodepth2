@@ -30,6 +30,9 @@ def disp_to_depth(disp, min_depth, max_depth):
 def transformation_from_parameters(axisangle, translation, invert=False):
   """ Convert pose estimation (axisangle, translation) into a 4x4 matrix
   """
+  axisangle = axisangle.squeeze(1)
+  t = translation.squeeze(1)
+  # print(axisangle.shape, translation.shape)
   R = geometry.angle_axis_to_rotation_matrix(axisangle)
   T = torch.cat([R, t.unsqueeze(-1)], dim=-1)
   # T ix 3x4, add [0, 0, 0, 1] as last row to form 4x4
