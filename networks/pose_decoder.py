@@ -27,7 +27,6 @@ class PoseDecoder(nn.Module):
       num_frames_to_predict_for = num_input_features - 1
     self.num_frames_to_predict_for = num_frames_to_predict_for
 
-    self.convs = OrderedDict()
     self.squeeze = nn.Conv2d(self.num_ch_enc[-1], 256, 1)
     self.convs = nn.Sequential(
         nn.ReLU(),
