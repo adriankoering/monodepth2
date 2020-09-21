@@ -26,8 +26,8 @@ from layers import *
 import datasets
 import networks
 import losses
-from IPython import embed
 
+import kornia
 from nonechucks import SafeDataset
 
 
@@ -316,14 +316,18 @@ class Trainer:
         if f_i != "s":
           # To maintain ordering we always pass frames in temporal order
           if f_i < 0:
+            # previous, center
             pose_inputs = [pose_feats[f_i], pose_feats[0]]
           else:
+            # center, next
             pose_inputs = [pose_feats[0], pose_feats[f_i]]
 
           if self.opt.pose_model_type == "separate_resnet":
-            pose_inputs = [
-                self.models["pose_encoder"](torch.cat(pose_inputs, 1))
-            ]
+            # fuse two images by concat'ing along channels into tensor
+            x = torch.cat(pose_inputs, 1)
+            pose_inputs = [self.models["pose_encoder"](x)]
+            # encoder returns list of subsampled features [f{1..5}]
+
           elif self.opt.pose_model_type == "posecnn":
             pose_inputs = torch.cat(pose_inputs, 1)
 
@@ -333,7 +337,11 @@ class Trainer:
 
           # Invert the matrix if the frame id is negative
           outputs[("cam_T_cam", 0, f_i)] = transformation_from_parameters(
-              axisangle[:, 0], translation[:, 0], invert=(f_i < 0))
+              # here we just select the first (of two estimated poses)
+              # and disregard the other???
+              axisangle[:, 0],
+              translation[:, 0],
+              invert=(f_i < 0))
 
     else:
       # Here we input all frames to the pose net (and predict all poses) together
@@ -427,6 +435,9 @@ class Trainer:
 
         outputs[("sample", frame_id, scale)] = pix_coords
 
+        # reconstruct center image from adjacent image and sampling grid
+        # matches kornia (K is in pixels, inv-depth are upsampled to HxW)
+        # (only the padding mode deviates (border here, zero there))
         outputs[("color", frame_id, scale)] = F.grid_sample(
             inputs[("color", frame_id, source_scale)],
             outputs[("sample", frame_id, scale)],
@@ -437,7 +448,7 @@ class Trainer:
           outputs[("color_identity", frame_id, scale)] = \
               inputs[("color", frame_id, source_scale)]
 
-  def compute_reprojection_loss(self, pred, target):
+  def photometric_error(self, pred, target):
     """ Computes reprojection loss between a batch of predicted and target images
     """
     abs_diff = torch.abs(target - pred)
@@ -449,7 +460,7 @@ class Trainer:
       ssim_loss = self.ssim(pred, target).mean(1, True)
       reprojection_loss = 0.85 * ssim_loss + 0.15 * l1_loss
 
-    return reprojection_loss
+    return reprojection_loss  # [12, 1, H, W]
 
   def compute_losses(self, inputs, outputs):
     """ Compute the reprojection and smoothness losses for a minibatch
@@ -457,7 +468,7 @@ class Trainer:
     loss_dict = {}
     total_loss = 0
 
-    for scale in self.opt.scales:
+    for scale in self.opt.scales:  # [0, 1, 2, 3]
       loss = 0
       reprojection_losses = []
 
@@ -470,28 +481,37 @@ class Trainer:
       color = inputs[("color", 0, scale)]
       target = inputs[("color", 0, source_scale)]
 
+      print(
+          "compute loss: ",
+          disp.shape,
+          color.shape,
+          target.shape,
+      )
+
       for frame_id in self.opt.frame_ids[1:]:
         pred = outputs[("color", frame_id, scale)]
-        reprojection_losses.append(self.compute_reprojection_loss(pred, target))
+        reprojection_losses.append(self.photometric_error(pred, target))
 
-      reprojection_losses = torch.cat(reprojection_losses, 1)
+      reprojection_losses = torch.cat(reprojection_losses, 1)  # [B, 2, H, W]
+      print("repr_loss: ", reprojection_losses.shape)
 
+      # no masking: skips all, automasking: heuristic, predictive mask: learned
       if not self.opt.disable_automasking:
-        identity_reprojection_losses = []
+        baseline_losses = []
         for frame_id in self.opt.frame_ids[1:]:
+          # baseline between center and adjacent color image
           pred = inputs[("color", frame_id, source_scale)]
-          identity_reprojection_losses.append(
-              self.compute_reprojection_loss(pred, target))
+          baseline_losses.append(self.photometric_error(pred, target))
 
-        identity_reprojection_losses = torch.cat(identity_reprojection_losses,
-                                                 1)
+        baseline_losses = torch.cat(baseline_losses, 1)  # [B, 2, H, W]
+        print("baseline pe: ", baseline_losses.shape)
 
         if self.opt.avg_reprojection:
-          identity_reprojection_loss = identity_reprojection_losses.mean(
-              1, keepdim=True)
+          baseline_loss = baseline_losses.mean(1, keepdim=True)
         else:
           # save both images, and do min all at once below
-          identity_reprojection_loss = identity_reprojection_losses
+          print("not performing mean()")
+          baseline_loss = baseline_losses
 
       elif self.opt.predictive_mask:
         # use the predicted mask
@@ -514,12 +534,10 @@ class Trainer:
         reprojection_loss = reprojection_losses
 
       if not self.opt.disable_automasking:
-        # add random numbers to break ties
-        identity_reprojection_loss += torch.randn(
-            identity_reprojection_loss.shape).cuda() * 0.00001
+        # add random numbers to break ties (why?)
+        baseline_loss += torch.randn(baseline_loss.shape).cuda() * 0.00001
 
-        combined = torch.cat((identity_reprojection_loss, reprojection_loss),
-                             dim=1)
+        combined = torch.cat((baseline_loss, reprojection_loss), dim=1)
       else:
         combined = reprojection_loss
 
@@ -529,15 +547,20 @@ class Trainer:
         to_optimise, idxs = torch.min(combined, dim=1)
 
       if not self.opt.disable_automasking:
+        # instanciate mask for logging (unused in optmization)
         outputs["identity_selection/{}".format(scale)] = (
-            idxs > identity_reprojection_loss.shape[1] - 1).float()
+            idxs > baseline_loss.shape[1] - 1).float()
 
-      loss += to_optimise.mean()
+      loss += to_optimise.mean()  # mean across Batch and Spatial Dimensions
 
+      # Mean Disparity loss comes in at the very end, is performed on scaled
+      # down image
       mean_disp = disp.mean(2, True).mean(3, True)
       norm_disp = disp / (mean_disp + 1e-7)
       smooth_loss = losses.inverse_depth_smoothness_loss(norm_disp, color)
+      print("smoothness loss: ", norm_disp.shape, color.shape)
 
+      # and then scaled down by scale level
       loss += self.opt.disparity_smoothness * smooth_loss / (2**scale)
       total_loss += loss
       loss_dict[f"loss/{scale}"] = loss
