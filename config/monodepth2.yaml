@@ -1,0 +1,11 @@
+
+model: MonoDepth2
+dataset: Kitti
+split: eigen_zhou
+
+# DataLoading
+batch_size: 12
+image_size: [128, 416]
+
+# Training
+max_epochs: 20
