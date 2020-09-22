@@ -7,5 +7,13 @@ split: eigen_zhou
 batch_size: 12
 image_size: [128, 416]
 
+# Model
+depthmodel: UNet # or DeepLab
+backbone: resnet18
+context: md2 # one of [md2 (none), aspp, psp]
+pyramid: Null
+regression: True
+
 # Training
 max_epochs: 20
+crop_augmentation: False
