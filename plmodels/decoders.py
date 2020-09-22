@@ -38,7 +38,7 @@ class DecoderLayer(nn.Module):
 
 class DepthDecoder(nn.Module):
 
-  def __init__(self):
+  def __init__(self, regression, *args, **kwargs):
     super().__init__()
 
     self.upconv4 = DecoderLayer(512, 256, 256, output=False)
@@ -61,7 +61,7 @@ class DepthDecoder(nn.Module):
 
 class PoseDecoder(nn.Module):
 
-  def __init__(self):
+  def __init__(self, *args, **kwargs):
     super().__init__()
     self.pose = nn.Sequential(
         nn.Conv2d(512, 256, 1),  # squeeze
