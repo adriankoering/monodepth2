@@ -1,11 +1,11 @@
-from .encoders import ResnetEncoder
-from .decoders import DepthDecoder, PoseDecoder
-from .trainingmodule import TestModule
-
 import torch
 from torch import nn
 
 from kornia import linalg
+
+from .encoders import ResnetEncoder
+from .decoders import DepthDecoder, PoseDecoder
+from .trainingmodule import TestModule
 
 from plmodels import depthmodules
 
