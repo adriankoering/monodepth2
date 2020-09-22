@@ -9,7 +9,13 @@ from kornia.enhance import Normalize
 class ResnetEncoder(nn.Module):
   """ Pytorch module for a resnet encoder """
 
-  def __init__(self, pretrained=True, num_input_images=1):
+  def __init__(self,
+               backbone,
+               context,
+               pretrained,
+               num_input_images=1,
+               *args,
+               **kwargs):
     super().__init__()
 
     normalize = Normalize(
@@ -17,7 +23,7 @@ class ResnetEncoder(nn.Module):
         std=torch.tensor(num_input_images * [0.229, 0.224, 0.225]),
     )
 
-    resnet = models.resnet18(pretrained=pretrained)
+    resnet = getattr(models, backbone)(pretrained=pretrained)
 
     input_conv = self._adapt_first_input(resnet.conv1, num_input_images)
 
