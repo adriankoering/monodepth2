@@ -7,19 +7,18 @@ from torch import nn
 
 from kornia import linalg
 
+from plmodels import depthmodules
+
 
 class MonoDepth2(TestModule):
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, depthmodel, *args, **kwargs):
     super().__init__(*args, **kwargs)
 
-    self.depth_model = nn.Sequential(
-        ResnetEncoder(),
-        DepthDecoder(),
-    )
+    self.depth_model = getattr(depthmodules, depthmodel)(*args, **kwargs)
 
     self.pose_model = nn.Sequential(
-        ResnetEncoder(num_input_images=2),
+        ResnetEncoder(pretrained=True, num_input_images=2, *args, **kwargs),
         PoseDecoder(),
     )
 
