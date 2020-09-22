@@ -81,6 +81,7 @@ class TrainingModule(pl.LightningModule):
     """
     I = geometry.intrinsics_like(f, depth) if I is None else I
     return geometry.warp_frame_depth(image, depth, T, I)
+    return geometry.warp_frame_depth(image, depth, T, I, padding_mode="border")
 
   def step(self, images):
     Iprev, Ic, Inext = self.unpack(images)
