@@ -217,9 +217,9 @@ class TestModule(TrainingModule):
     aggregated = {
         k: torch.stack([o[k] for o in outs]).mean() for k in self.metric_names
     }
-    self.logger.log_metrics(aggregated, step=self.global_step)
 
-    print(aggregated)
+    metrics = {"test/" + k: v for k, v in aggregated.items()}
+    self.logger.log_metrics(aggregated, step=self.global_step)
 
     return aggregated
 
