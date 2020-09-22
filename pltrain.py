@@ -52,7 +52,7 @@ def main():
       # checkpoint_callback=False,
       terminate_on_nan=True,
       profiler=True,
-      resume_from_checkpoint="ckpts/rn18lowressmooth_depth-estimation/1_170hdqox/checkpoints/epoch=3.ckpt"
+      # resume_from_checkpoint="ckpts/rn18lowressmooth_depth-estimation/1_170hdqox/checkpoints/epoch=3.ckpt"
   )
 
   model = Model(**ARGS.hparams)
