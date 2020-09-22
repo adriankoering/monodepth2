@@ -14,12 +14,28 @@ import matplotlib.pyplot as plt
 import losses
 
 
+class NoCrop(nn.Module):
+
+  def forward(self, Iprev, Ic, Inext):
+    Tcrop = torch.eye(3)
+    return Iprev, Ic, Inext, Tcrop
+
+
+class RandomCrop(nn.Module):
+
+  def forward(self, Iprev, Ic, Inext):
+    # TODO:
+    Tcrop = torch.eye(3)
+    return Iprev, Ic, Inext, Tcrop
+
+
 class TrainingModule(pl.LightningModule):
 
-  def __init__(self, image_size, *args, **kwargs):
+  def __init__(self, image_size, crop_augmentation, *args, **kwargs):
     super().__init__()
     self.save_hyperparameters()
     self.ssim = losses.SSIM(window_size=7)
+    self.crop = RandomCrop() if crop_augmentation else NoCrop()
 
   def configure_optimizers(self):
     opt = torch.optim.Adam(self.parameters(), lr=0.0001)
@@ -75,16 +91,18 @@ class TrainingModule(pl.LightningModule):
     Lsmooth = self.smoothness_loss(idepth, Ic)
     return Lrecon, Lbase, Lsmooth
 
-  def reproject(self, depth, image, T, I=None, f=721.5 / 3):
+  def reproject(self, depth, image, T, Tcrop, I=None, f=721.5 / 3):
     """ Reconstruct center image from given adjacent 'image', 'depth' and
         transformation 'T' from center to adjacent camera coordinates.
     """
     I = geometry.intrinsics_like(f, depth) if I is None else I
-    return geometry.warp_frame_depth(image, depth, T, I)
+    # modify I based on crop
     return geometry.warp_frame_depth(image, depth, T, I, padding_mode="border")
 
   def step(self, images):
     Iprev, Ic, Inext = self.unpack(images)
+
+    Iprev, Ic, Inext, Tcrop = self.crop(Iprev, Ic, Inext)
     images = torch.stack([Iprev, Ic, Inext], dim=1)
 
     idepths, Tprev, Tnext = self(Iprev, Ic, Inext)
@@ -96,7 +114,8 @@ class TrainingModule(pl.LightningModule):
       # iterate over adjacent images and transform
       for Ia, Ta in [[Iprev, Tprev], [Inext, Tnext]]:
 
-        Rc = self.reproject(self.upsample(self.denormalize(idepth)), Ia, Ta)
+        depth = self.upsample(self.denormalize(idepth))
+        Rc = self.reproject(depth, Ia, T=Ta, Tcrop=Tcrop)
         Lrecon, Lbase, Lsmooth = self.loss_fn(Rc, Ic, Ia, idepth)
         recons.append(Rc)
         recon_losses.extend([Lrecon, Lbase])
