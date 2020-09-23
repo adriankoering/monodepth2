@@ -16,8 +16,13 @@ def parse_arguments():
 
   # model checkpoint to test
   parser.add_argument("-c", "--ckpt", type=str, required=True)
+  # parser.add_argument("-n", "--name", type=str, required=True)
 
   args = parser.parse_args()
+
+  p = Path(args.ckpt)
+  args.name = p.parent.parent.parent.stem.split("_")[0]
+  args.version = f"version_{p.parent.parent.stem[0]}"
   return args
 
 
@@ -26,9 +31,9 @@ ARGS = parse_arguments()
 
 def main():
 
-  # tb_logger = pl.loggers.TensorBoardLogger("lightning_logs", name=ARGS.name)
-  trainer = pl.Trainer(gpus=0,)
-  # logger=[tb_logger]  )
+  tb_logger = pl.loggers.TensorBoardLogger(
+      "lightning_logs", name=ARGS.name, version=ARGS.version)
+  trainer = pl.Trainer(gpus=0, logger=[tb_logger])
 
   model = Model.load_from_checkpoint(checkpoint_path=ARGS.ckpt)
   ds = Dataset(image_size=model.hparams["image_size"])
