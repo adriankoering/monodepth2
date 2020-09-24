@@ -13,9 +13,11 @@ RUN pip install git+https://github.com/adriankoering/kornia.git@resample_border
 # RUN pip install git+https://github.com/kornia/kornia
 
 # RUN conda install pytorch torchvision cudatoolkit=10.2 -c pytorch-nightly
-RUN conda install pytorch torchvision cudatoolkit=10.2 -c pytorch
+# torchvision
+RUN conda install pytorch cudatoolkit=10.2 -c pytorch
 RUN conda install -c conda-forge pytorch-lightning
 RUN pip install 'ray[tune]' moviepy av wandb hyperopt nonechucks
+RUN pip install git+https://github.com/adriankoering/vision.git@deeplab_nearest
 
 RUN pip uninstall -y pillow
 RUN CC="cc -mavx2" pip install -U --force-reinstall pillow-simd
