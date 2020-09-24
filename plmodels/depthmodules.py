@@ -31,4 +31,5 @@ class DeepLab(nn.Module):
     )
 
   def forward(self, x):
-    return self.depth(x)
+    out_dict = self.depth(x)
+    return [out_dict["aux"], out_dict["out"]]
