@@ -162,7 +162,7 @@ class TrainingModule(pl.LightningModule):
     return {"val_loss": loss}
 
   def log_images(self, idepths, images):
-    tensorboard_logger, *_ = self.logger.experiment
+    *_, tensorboard_logger = self.logger.experiment
 
     for n in range(min(4, len(images))):
       idepth, image = idepths[n], images[n]
@@ -187,7 +187,7 @@ class TrainingModule(pl.LightningModule):
       tensorboard_logger.add_figure(key, fig, self.global_step)
 
   def log_sequence(self, batch, name="images"):
-    tensorboard_logger, *_ = self.logger.experiment
+    *_, tensorboard_logger = self.logger.experiment
 
     for n in range(min(4, len(batch))):
       seq = batch[n].unsqueeze(0)

@@ -10,10 +10,10 @@ import pytorch_lightning as pl
 import plmodels as models
 import pldatasets as datasets
 
-import os
-os.environ["WANDB_API_KEY"] = Path("/workspace/wandb.key").read_text().strip()
-
-import wandb
+# import os
+# os.environ["WANDB_API_KEY"] = Path("/workspace/wandb.key").read_text().strip()
+#
+# import wandb
 
 
 def parse_arguments():
@@ -39,14 +39,13 @@ Dataset = getattr(datasets, ARGS.hparams.pop("dataset") + "DaliModule")
 def main():
 
   tb_logger = pl.loggers.TensorBoardLogger("lightning_logs", name=ARGS.name)
-  wb_logger = pl.loggers.WandbLogger(project="depth-estimation", name=ARGS.name)
-
+  # wb_logger = pl.loggers.WandbLogger(project="depth-estimation", name=ARGS.name)
   lr_logger = pl.callbacks.LearningRateLogger()
   # gpu_logger = pl.callbacks.GpuUsageLogger(temperature=True)
   trainer = pl.Trainer(
       gpus=1,
       max_epochs=ARGS.hparams["max_epochs"],
-      logger=[tb_logger, wb_logger],
+      logger=[tb_logger],  # wb_logger
       callbacks=[lr_logger],
       default_root_dir="ckpts",
       # checkpoint_callback=False,
