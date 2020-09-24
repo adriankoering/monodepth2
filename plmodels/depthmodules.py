@@ -1,4 +1,5 @@
 from torch import nn
+from torchvision import models
 
 from .encoders import ResnetEncoder
 from .decoders import DepthDecoder
@@ -19,9 +20,15 @@ class UNet(nn.Module):
 
 class DeepLab(nn.Module):
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, regression, *args, **kwargs):
     super().__init__()
-    pass
+    num_classes = 1 if regression else 128  # TODO: 128?
+    self.depth = models.segmentation.deeplabv3_resnet50(
+        pretrained=False,
+        progress=False,
+        num_classes=num_classes,
+        aux_loss=True,
+    )
 
   def forward(self, x):
-    return x
+    return self.depth(x)
