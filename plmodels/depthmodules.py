@@ -4,16 +4,23 @@ from .encoders import ResnetEncoder
 from .decoders import DepthDecoder
 
 
-def UNet(*args, **kwargs):
-  return nn.Sequential(
-      ResnetEncoder(pretrained=True, *args, **kwargs),
-      DepthDecoder(*args, **kwargs),
-  )
+class UNet(nn.Module):
+
+  def __init__(self, *args, **kwargs):
+    super().__init__()
+
+    self.encoder = ResnetEncoder(pretrained=True, *args, **kwargs)
+    self.decoder = DepthDecoder(self.encoder.out_channels, *args, **kwargs)
+
+  def forward(self, x):
+    e = self.encoder(x)
+    return self.decoder(e)
 
 
 class DeepLab(nn.Module):
 
-  def __init__(self, regression, *args, **kwargs):
+  def __init__(self, *args, **kwargs):
+    super().__init__()
     pass
 
   def forward(self, x):
