@@ -50,7 +50,6 @@ class DepthDecoder(nn.Module):
 
   def __init__(self, in_channels, regression, *args, **kwargs):
     super().__init__()
-    print("DepthDec: ", in_channels)
     f0, f1, f2, f3, f4 = in_channels
     self.upconv4 = DecoderLayer(f4, 256, f3, output=False)
     self.upconv3 = DecoderLayer(256, 128, f2, regression=regression)
