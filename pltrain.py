@@ -42,13 +42,21 @@ def main():
   # wb_logger = pl.loggers.WandbLogger(project="depth-estimation", name=ARGS.name)
   lr_logger = pl.callbacks.LearningRateLogger()
   # gpu_logger = pl.callbacks.GpuUsageLogger(temperature=True)
+
+  ckpt_cb = pl.callbacks.ModelCheckpoint(
+      monitor='val_loss',
+      verbose=True,
+      save_top_k=5,
+      save_last=True,
+  )
+
   trainer = pl.Trainer(
       gpus=1,
       max_epochs=ARGS.hparams["max_epochs"],
       logger=[tb_logger],  # wb_logger
       callbacks=[lr_logger],
-      default_root_dir="ckpts",
-      # checkpoint_callback=False,
+      checkpoint_callback=ckpt_cb,
+      weights_save_path="ckpts",
       terminate_on_nan=True,
       profiler=True,
       # resume_from_checkpoint="ckpts/rn18lowressmooth_depth-estimation/1_170hdqox/checkpoints/epoch=3.ckpt"
@@ -57,7 +65,8 @@ def main():
   model = Model(**ARGS.hparams)
   ds = Dataset(**ARGS.hparams)
   trainer.fit(model, ds)
-  # trainer.test(model)
+
+  print(ckpt_cb.best_model_path, ckpt_cb.best_model_score)
 
 
 if __name__ == "__main__":
