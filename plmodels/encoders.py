@@ -34,8 +34,17 @@ class ResnetEncoder(nn.Module):
     self.layer2 = resnet.layer2
     self.layer3 = resnet.layer3
     self.layer4 = resnet.layer4
+
+    f0 = resnet.conv1.out_channels
+    f1 = self._get_out_channels(resnet.layer1[-1])
+    f2 = self._get_out_channels(resnet.layer2[-1])
+    f3 = self._get_out_channels(resnet.layer3[-1])
+    f4 = self._get_out_channels(resnet.layer4[-1])
+
+    self.out_channels = [f0, f1, f2, f3, f4]
+
     self.context = getattr(contextmodules, context)(
-        in_channels=512, out_channels=512, *args, **kwargs)
+        in_channels=f4, out_channels=f4, *args, **kwargs)
 
   def _adapt_first_input(self, input_conv, num_input_images):
 
@@ -59,6 +68,15 @@ class ResnetEncoder(nn.Module):
       new_conv = input_conv
 
     return new_conv
+
+  def _get_out_channels(self, module):
+    out_channels = 0
+    for m in module.children():
+      try:
+        out_channels = m.out_channels
+      except AttributeError as e:  # not a conv-layer
+        pass
+    return out_channels
 
   def forward(self, x):
     f0 = self.layer0(x)

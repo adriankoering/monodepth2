@@ -1,5 +1,3 @@
-from layers import ConvBlock, Conv3x3
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +7,12 @@ from kornia import geometry
 
 class DecoderLayer(nn.Module):
 
-  def __init__(self, in_channels, out_channels, concat_channels=0, output=True):
+  def __init__(self,
+               in_channels,
+               out_channels,
+               concat_channels=0,
+               regression=True,
+               output=True):
     super().__init__()
     kwargs = {"kernel_size": 3, "padding": 1, "padding_mode": "reflect"}
 
@@ -19,7 +22,14 @@ class DecoderLayer(nn.Module):
     self.b1 = nn.BatchNorm2d(out_channels)
 
     if output:
-      self.output = nn.Conv2d(out_channels, 1, **kwargs)
+      if regression:
+        self.output = nn.Conv2d(out_channels, 1, **kwargs)
+      else:
+        # TODO: 128?
+        self.output = None  # nn.Sequential(
+        #     nn.Conv2d(out_channels, 128, **kwargs),
+        #     nn.Softmax2d(),
+        # )
     else:
       self.output = None
 
@@ -38,14 +48,15 @@ class DecoderLayer(nn.Module):
 
 class DepthDecoder(nn.Module):
 
-  def __init__(self, regression, *args, **kwargs):
+  def __init__(self, in_channels, regression, *args, **kwargs):
     super().__init__()
-
-    self.upconv4 = DecoderLayer(512, 256, 256, output=False)
-    self.upconv3 = DecoderLayer(256, 128, 128)
-    self.upconv2 = DecoderLayer(128, 64, 64)
-    self.upconv1 = DecoderLayer(64, 32, 64)
-    self.upconv0 = DecoderLayer(32, 16)
+    print("DepthDec: ", in_channels)
+    f0, f1, f2, f3, f4 = in_channels
+    self.upconv4 = DecoderLayer(f4, 256, f3, output=False)
+    self.upconv3 = DecoderLayer(256, 128, f2, regression=regression)
+    self.upconv2 = DecoderLayer(128, 64, f1, regression=regression)
+    self.upconv1 = DecoderLayer(64, 32, f0, regression=regression)
+    self.upconv0 = DecoderLayer(32, 16, regression=regression)
 
   def forward(self, features):
     f0, f1, f2, f3, f4 = features
@@ -61,10 +72,12 @@ class DepthDecoder(nn.Module):
 
 class PoseDecoder(nn.Module):
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, in_channels, *args, **kwargs):
     super().__init__()
+    *_, f4 = in_channels
+
     self.pose = nn.Sequential(
-        nn.Conv2d(512, 256, 1),  # squeeze
+        nn.Conv2d(f4, 256, 1),
         nn.ReLU(),
         nn.Conv2d(256, 256, 3, padding=1),
         nn.ReLU(),
