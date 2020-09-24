@@ -3,11 +3,9 @@ from torch import nn
 
 from kornia import linalg
 
-from .encoders import ResnetEncoder
-from .decoders import DepthDecoder, PoseDecoder
 from .trainingmodule import TestModule
 
-from plmodels import depthmodules
+from plmodels import depthmodules, posemodules
 
 
 class MonoDepth2(TestModule):
@@ -16,11 +14,7 @@ class MonoDepth2(TestModule):
     super().__init__(*args, **kwargs)
 
     self.depth_model = getattr(depthmodules, depthmodel)(*args, **kwargs)
-
-    self.pose_model = nn.Sequential(
-        ResnetEncoder(pretrained=True, num_input_images=2, *args, **kwargs),
-        PoseDecoder(),
-    )
+    self.pose_model = posemodules.PoseModule(*args, **kwargs)
 
   def forward(self, Iprev, Icenter, Inext):
     inv_depths = self.depth_model(Icenter)
