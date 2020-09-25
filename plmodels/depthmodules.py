@@ -32,4 +32,4 @@ class DeepLab(nn.Module):
 
   def forward(self, x):
     out_dict = self.depth(x)
-    return [out_dict["aux"], out_dict["out"]]
+    return [out_dict["aux"].sigmoid(), out_dict["out"].sigmoid()]
