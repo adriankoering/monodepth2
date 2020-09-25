@@ -25,7 +25,7 @@ class KittiTFRecordPipeline(Pipeline):
     super().__init__(batch_size, num_threads, device_id)
 
     mode = "train" if train else "val"
-    tfrecordfile = Path(data_dir) / split / (mode + "_small.tfrecord")
+    tfrecordfile = Path(data_dir) / split / (mode + ".tfrecord")
     indexfile = tfrecordfile.with_suffix(".idx")
 
     if not indexfile.exists():
