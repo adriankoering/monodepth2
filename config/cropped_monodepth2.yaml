@@ -5,7 +5,7 @@ split: eigen_zhou
 
 # DataLoading
 batch_size: 12
-image_size: [128, 416]
+image_size: [192, 640]
 
 # Model
 depthmodel: UNet # or DeepLab
@@ -16,4 +16,4 @@ regression: True
 
 # Training
 max_epochs: 20
-crop_size: Null
+crop_size: [128, 416]

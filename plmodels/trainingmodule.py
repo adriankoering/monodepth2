@@ -16,26 +16,74 @@ import losses
 
 class NoCrop(nn.Module):
 
+  def __init__(self, image_size):
+    super().__init__()
+
+    self.image_size = image_size
+    H, W = image_size
+
+    self.K = torch.tensor([[0.58, 0, 0.5], [0, 1.92, 0.5], [0, 0, 1.]])
+    self.K[0] *= W
+    self.K[1] *= H
+
+  def stacked_K(self, B):
+    return torch.stack(B * [self.K])
+
   def forward(self, Iprev, Ic, Inext):
-    Tcrop = torch.eye(3)
-    return Iprev, Ic, Inext, Tcrop
+    B, C, H, W = Ic.shape
+    return Iprev, Ic, Inext, self.stacked_K(B).to(Ic.device)
 
 
-class RandomCrop(nn.Module):
+class RandomCrop(NoCrop):
+
+  def __init__(self, image_size, crop_size):
+    super().__init__(image_size)
+    self.crop_size = crop_size
+
+  def apply_crop(self, Ks, params):
+    src = params["src"]
+
+    LT = src[:, 0]  # left, top corner
+    Ks[..., 0, -1] = Ks[..., 0, -1] - LT[:, 0]
+    Ks[..., 1, -1] = Ks[..., 1, -1] - LT[:, 1]
+
+    return Ks
 
   def forward(self, Iprev, Ic, Inext):
-    # TODO:
-    Tcrop = torch.eye(3)
-    return Iprev, Ic, Inext, Tcrop
+
+    if not self.training:
+      # Random crop only augments training
+      return super().forward(Iprev, Ic, Inext)
+
+    B, C, H, W = Ic.shape
+
+    params = augmentation.random_generator.random_crop_generator(
+        batch_size=B,
+        input_size=self.image_size,
+        size=self.crop_size,
+    )
+
+    Ic = augmentation.functional.apply_crop(Ic, params)
+    Iprev = augmentation.functional.apply_crop(Iprev, params)
+    Inext = augmentation.functional.apply_crop(Inext, params)
+
+    Ks = self.stacked_K(B)
+    Ks = self.apply_crop(Ks, params)
+
+    return Iprev, Ic, Inext, Ks.to(Ic.device)
 
 
 class TrainingModule(pl.LightningModule):
 
-  def __init__(self, image_size, crop_augmentation, *args, **kwargs):
+  def __init__(self, image_size, crop_size, *args, **kwargs):
     super().__init__()
     self.save_hyperparameters()
     self.ssim = losses.SSIM(window_size=7)
-    self.crop = RandomCrop() if crop_augmentation else NoCrop()
+
+    if crop_size:
+      self.crop = RandomCrop(image_size, crop_size)
+    else:
+      self.crop = NoCrop(image_size)
 
   def configure_optimizers(self):
     opt = torch.optim.Adam(self.parameters(), lr=0.0001)
@@ -47,8 +95,9 @@ class TrainingModule(pl.LightningModule):
     x = x[0]
     return x["prev"], x["center"], x["next"]
 
-  def upsample(self, idepth):
-    return F.interpolate(idepth, size=self.hparams.image_size, mode="nearest")
+  def upsample_like(self, idepth, image):
+    B, C, *size = image.shape
+    return F.interpolate(idepth, size=size, mode="nearest")
 
   def downsample(self, image, idepth):
     B, C, H, W = idepth.shape
@@ -91,18 +140,16 @@ class TrainingModule(pl.LightningModule):
     Lsmooth = self.smoothness_loss(idepth, Ic)
     return Lrecon, Lbase, Lsmooth
 
-  def reproject(self, depth, image, T, Tcrop, I=None, f=721.5 / 3):
+  def reproject(self, depth, image, T, K):
     """ Reconstruct center image from given adjacent 'image', 'depth' and
         transformation 'T' from center to adjacent camera coordinates.
     """
-    I = geometry.intrinsics_like(f, depth) if I is None else I
-    # modify I based on crop
-    return geometry.warp_frame_depth(image, depth, T, I, padding_mode="border")
+    return geometry.warp_frame_depth(image, depth, T, K, padding_mode="border")
 
   def step(self, images):
     Iprev, Ic, Inext = self.unpack(images)
 
-    Iprev, Ic, Inext, Tcrop = self.crop(Iprev, Ic, Inext)
+    Iprev, Ic, Inext, K = self.crop(Iprev, Ic, Inext)
     images = torch.stack([Iprev, Ic, Inext], dim=1)
 
     idepths, Tprev, Tnext = self(Iprev, Ic, Inext)
@@ -114,8 +161,8 @@ class TrainingModule(pl.LightningModule):
       # iterate over adjacent images and transform
       for Ia, Ta in [[Iprev, Tprev], [Inext, Tnext]]:
 
-        depth = self.upsample(self.denormalize(idepth))
-        Rc = self.reproject(depth, Ia, T=Ta, Tcrop=Tcrop)
+        depth = self.upsample_like(self.denormalize(idepth), Ic)
+        Rc = self.reproject(depth, Ia, Ta, K)
         Lrecon, Lbase, Lsmooth = self.loss_fn(Rc, Ic, Ia, idepth)
         recons.append(Rc)
         recon_losses.extend([Lrecon, Lbase])
