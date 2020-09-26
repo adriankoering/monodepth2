@@ -260,40 +260,31 @@ class TestModule(TrainingModule):
     self.max_depth = max_depth
 
   def test_step(self, batch, batch_idx):
-    images, gt_depths = batch
+    image, gt_depth = batch
 
     # discard low-res depth estimates
-    pred_idepths, *_ = self.depth_model(images)
+    *_, pred_idepth = self.depth_model(image)
+    assert pred_idepth.shape[-2:] == image.shape[-2:]
 
-    batch_metrics = []
-    for pred_idepth, gt_depth in zip(pred_idepths, gt_depths):
-      pred_depth, gt_depth = self.prepare_depth(pred_idepth, gt_depth)
-
-      metrics = self.compute_metrics(pred_depth, gt_depth)
-      batch_metrics.append(dict(zip(self.metric_names, metrics)))
-    return batch_metrics
+    pred_depth, gt_depth = self.prepare_depth(pred_idepth, gt_depth)
+    metrics = self.compute_metrics(pred_depth, gt_depth)
+    return dict(zip(self.metric_names, metrics))
 
   def test_epoch_end(self, outputs):
     """ outputs is list of batches, batch is list of dicts:
         outputs = [batch1 = [metric_b1_1 = {..}, metric_b1_2 = {..}, ..],
                    batch2 = [metric_b2_1 = {..}, metric_b2_2 = {..}, ..], ..]
     """
-    # flatten batches into a single long list
-    outs = sum(outputs, [])
+    mean = lambda k: torch.stack([o[k] for o in outputs]).mean()
+    metrics = {"test/" + k: mean(k) for k in self.metric_names}
+    self.logger.log_metrics(metrics, step=self.global_step)
 
-    aggregated = {
-        k: torch.stack([o[k] for o in outs]).mean() for k in self.metric_names
-    }
-
-    metrics = {"test/" + k: v for k, v in aggregated.items()}
-    self.logger.log_metrics(aggregated, step=self.global_step)
-
-    return aggregated
+    return metrics
 
   def eigen_mask(self, gt_depth):
     """ Return mask comparing prediction only at valid annotation pixels """
 
-    C, H, W = gt_depth.shape
+    B, C, H, W = gt_depth.shape
 
     # include valid gt pixel annotations
     valid = torch.logical_and(self.min_depth < gt_depth,
@@ -302,7 +293,7 @@ class TestModule(TrainingModule):
     crop = torch.zeros_like(gt_depth)
     top, bottom = int(0.40810811 * H), int(0.99189189 * H)
     left, right = int(0.03594771 * W), int(0.96405229 * W)
-    crop[:, top:bottom, left:right] = 1
+    crop[..., top:bottom, left:right] = 1
 
     return torch.logical_and(valid, crop)
 
