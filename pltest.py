@@ -31,9 +31,9 @@ ARGS = parse_arguments()
 
 def main():
 
-  tb_logger = pl.loggers.TensorBoardLogger(
-      "lightning_logs", name=ARGS.name, version=ARGS.version)
-  trainer = pl.Trainer(gpus=0, logger=[tb_logger])
+  # tb_logger = pl.loggers.TensorBoardLogger(
+  #     "lightning_logs", name=ARGS.name, version=ARGS.version)
+  trainer = pl.Trainer(gpus=1)  # , logger=[tb_logger])
 
   model = Model.load_from_checkpoint(checkpoint_path=ARGS.ckpt)
   ds = Dataset(image_size=model.hparams["image_size"])
@@ -41,9 +41,10 @@ def main():
   test_dl = ds.test_dataloader()
 
   # optionally: check if all data exists and is loadable
-  # for image, depth in test_dl:
-  #   pass
+  for image, depth in test_dl:
+    pass
 
+  test_dl = ds.test_dataloader()
   trainer.test(model, test_dataloaders=test_dl)
 
 
