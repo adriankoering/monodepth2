@@ -92,10 +92,6 @@ class KittiTestset(data.Dataset):
     velo_dir = self.data_dir / folder / "velodyne_points/data"
     velo_fname = velo_dir / f"{int(frame_index):010d}.bin"
 
-    if not velo_fname.exists():
-      idx = torch.randint(low=0, high=20, size=[]).item()
-      return self.load_depth(*self.files[idx].split())
-
     depth = generate_depth_map(calib_dir, velo_fname, cam=self.side_map[side])
 
     depth = resize(
