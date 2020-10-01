@@ -5,15 +5,12 @@ from torchvision import models
 
 from kornia.enhance import Normalize
 
-from plmodels import contextmodules
-
 
 class ResnetEncoder(nn.Module):
   """ Pytorch module for a resnet encoder """
 
   def __init__(self,
                backbone,
-               context,
                pretrained,
                num_input_images=1,
                downsampling=[True, True, True, True, True],
@@ -51,9 +48,6 @@ class ResnetEncoder(nn.Module):
     f4 = self._get_out_channels(resnet.layer4[-1])
 
     self.out_channels = [f0, f1, f2, f3, f4]
-
-    self.context = getattr(contextmodules, context)(
-        in_channels=f4, out_channels=f4, *args, **kwargs)
 
   def _adapt_first_input(self, input_conv, num_input_images):
 
@@ -107,7 +101,7 @@ class ResnetEncoder(nn.Module):
     f1 = self.layer1(f0)
     f2 = self.layer2(f1)
     f3 = self.layer3(f2)
-    f4 = self.context(self.layer4(f3))
+    f4 = self.layer4(f3)
 
     # high to low-res features
     return [f0, f1, f2, f3, f4]
