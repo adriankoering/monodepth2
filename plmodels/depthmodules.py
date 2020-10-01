@@ -56,7 +56,7 @@ class DecoderLayer(nn.Module):
 
 class MonoDepth2(nn.Module):
 
-  def __init__(self, *args, **kwargs):
+  def __init__(self, regression, *args, **kwargs):
     super().__init__()
 
     ds = 5 * [True]
