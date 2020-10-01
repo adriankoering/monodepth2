@@ -7,83 +7,132 @@ from torch.nn import functional as F
 from torchvision import transforms
 
 import kornia
-from kornia import geometry, enhance, augmentation  #, losses
+from kornia import augmentation, enhance, geometry, linalg  #, losses
+
+import losses
+from plmodels import depthmodules, posemodules, crops
 
 import matplotlib.pyplot as plt
 
-import losses
 
+class TestModule(pl.LightningModule):
 
-class NoCrop(nn.Module):
-
-  def __init__(self, image_size):
+  def __init__(self,
+               target_size=(375, 1242),
+               min_depth=1e-3,
+               max_depth=80.,
+               *args,
+               **kwargs):
     super().__init__()
 
-    self.image_size = image_size
-    H, W = image_size
+    self.target_size = target_size
+    self.metric_names = [
+        "abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"
+    ]
+    self.min_depth = min_depth
+    self.max_depth = max_depth
 
-    self.K = torch.tensor([[0.58, 0, 0.5], [0, 1.92, 0.5], [0, 0, 1.]])
-    self.K[0] *= W
-    self.K[1] *= H
+  def test_step(self, batch, batch_idx):
+    image, gt_depth = batch
 
-  def stacked_K(self, B):
-    return torch.stack(B * [self.K])
+    # discard low-res depth estimates
+    *_, pred_idepth = self.depth_model(image)
+    assert pred_idepth.shape[-2:] == image.shape[-2:]
 
-  def forward(self, Iprev, Ic, Inext):
-    B, C, H, W = Ic.shape
-    return Iprev, Ic, Inext, self.stacked_K(B).to(Ic.device)
+    pred_depth, gt_depth = self.prepare_depth(pred_idepth, gt_depth)
+    metrics = self.compute_metrics(pred_depth, gt_depth)
+    return dict(zip(self.metric_names, metrics))
+
+  def test_epoch_end(self, outputs):
+    """ outputs is list of batches, batch is list of dicts:
+        outputs = [batch1 = [metric_b1_1 = {..}, metric_b1_2 = {..}, ..],
+                   batch2 = [metric_b2_1 = {..}, metric_b2_2 = {..}, ..], ..]
+    """
+    mean = lambda k: torch.stack([o[k] for o in outputs]).mean()
+    metrics = {"test/" + k: mean(k) for k in self.metric_names}
+    # self.logger.log_metrics(metrics, step=self.global_step)
+
+    return metrics
+
+  def eigen_mask(self, gt_depth):
+    """ Return mask comparing prediction only at valid annotation pixels """
+
+    B, C, H, W = gt_depth.shape
+
+    # include valid gt pixel annotations
+    valid = torch.logical_and(self.min_depth < gt_depth,
+                              gt_depth < self.max_depth)
+
+    crop = torch.zeros_like(gt_depth)
+    top, bottom = int(0.40810811 * H), int(0.99189189 * H)
+    left, right = int(0.03594771 * W), int(0.96405229 * W)
+    crop[..., top:bottom, left:right] = 1
+
+    return torch.logical_and(valid, crop)
+
+  def prepare_depth(self, pred_idepth, gt_depth):
+    """ Prepare predicted depth for evaluation with gt_depth """
+
+    pred_depth = self.denormalize(pred_idepth)
+    pred_depth = F.interpolate(pred_depth, self.target_size)
+    pred_depth.clamp_(self.min_depth, self.max_depth)
+
+    mask = self.eigen_mask(gt_depth)
+
+    pred_depth, gt_depth = pred_depth[mask], gt_depth[mask]
+
+    assert len(pred_depth) and len(gt_depth)
+
+    pred_depth *= torch.median(gt_depth) / torch.median(pred_depth)
+    return pred_depth, gt_depth
+
+  def compute_metrics(self, pred, gt):
+    """ Computation of error metrics between predicted and ground truth depths
+    """
+    thresh = torch.max((gt / pred), (pred / gt))
+    a1 = (thresh < 1.25).float().mean()
+    a2 = (thresh < 1.25**2).float().mean()
+    a3 = (thresh < 1.25**3).float().mean()
+
+    rmse = (gt - pred)**2
+    rmse = rmse.mean().sqrt()
+
+    rmse_log = (gt.log() - pred.log())**2
+    rmse_log = rmse_log.mean().sqrt()
+
+    abs_rel = ((gt - pred).abs() / gt).mean()
+
+    sq_rel = ((gt - pred).pow(2) / gt).mean()
+
+    return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
 
 
-class RandomCrop(NoCrop):
+class TrainingModule(TestModule):
 
-  def __init__(self, image_size, crop_size):
-    super().__init__(image_size)
-    self.crop_size = crop_size
-
-  def apply_crop(self, Ks, params):
-    src = params["src"]
-
-    LT = src[:, 0]  # left, top corner
-    Ks[..., 0, -1] = Ks[..., 0, -1] - LT[:, 0]
-    Ks[..., 1, -1] = Ks[..., 1, -1] - LT[:, 1]
-
-    return Ks
-
-  def forward(self, Iprev, Ic, Inext):
-
-    if not self.training:
-      # Random crop only augments training
-      return super().forward(Iprev, Ic, Inext)
-
-    B, C, H, W = Ic.shape
-
-    params = augmentation.random_generator.random_crop_generator(
-        batch_size=B,
-        input_size=self.image_size,
-        size=self.crop_size,
-    )
-
-    Ic = augmentation.functional.apply_crop(Ic, params)
-    Iprev = augmentation.functional.apply_crop(Iprev, params)
-    Inext = augmentation.functional.apply_crop(Inext, params)
-
-    Ks = self.stacked_K(B)
-    Ks = self.apply_crop(Ks, params)
-
-    return Iprev, Ic, Inext, Ks.to(Ic.device)
-
-
-class TrainingModule(pl.LightningModule):
-
-  def __init__(self, image_size, crop_size, *args, **kwargs):
-    super().__init__()
+  def __init__(self, depthmodel, image_size, crop_size, *args, **kwargs):
+    super().__init__(*args, **kwargs)
     self.save_hyperparameters()
-    self.ssim = losses.SSIM(window_size=7)
+    self.ssim = losses.SSIM()
 
     if crop_size:
-      self.crop = RandomCrop(image_size, crop_size)
+      self.crop = crops.RandomCrop(image_size, crop_size)
     else:
-      self.crop = NoCrop(image_size)
+      self.crop = crops.NoCrop(image_size)
+
+    self.depth_model = getattr(depthmodules, depthmodel)(*args, **kwargs)
+    self.pose_model = posemodules.PoseModule(*args, **kwargs)
+
+  def forward(self, Iprev, Icenter, Inext):
+    inv_depths = self.depth_model(Icenter)
+
+    # predict poses with consistent temporal order (cat along channels)
+    Tprev = self.pose_model(torch.cat([Iprev, Icenter], dim=1))
+    Tnext = self.pose_model(torch.cat([Icenter, Inext], dim=1))
+
+    # invert Tprev, because we need pixels to go from center to adjacent
+    Tprev = linalg.inverse_transformation(Tprev)
+
+    return inv_depths, Tprev, Tnext
 
   def configure_optimizers(self):
     opt = torch.optim.Adam(self.parameters(), lr=0.0001)
@@ -222,14 +271,13 @@ class TrainingModule(pl.LightningModule):
         ax.set_xticks([])
         ax.set_yticks([])
 
-      # plot depth indivdually to scale things properly
-      ax0.set_title("Inverse Depth")
-      aximg = ax0.imshow(kornia.tensor_to_image(idepth))
-      plt.colorbar(aximg, ax=ax0)
+      ax0.set_title("Image")
+      aximg = ax0.imshow(kornia.tensor_to_image(image))
 
-      ax1.set_title("Image")
-      aximg = ax1.imshow(kornia.tensor_to_image(image))
-      plt.colorbar(aximg, ax=ax1)
+      ax1.set_title("Inverse Depth")
+      idepth = kornia.tensor_to_image(idepth)
+      aximg = ax1.imshow(idepth, vmin=0, vmax=1, cmap="magma")
+      # plt.colorbar(aximg, ax=[ax0, ax1], orientation="horizontal")
 
       tensorboard_logger.add_figure(key, fig, self.global_step)
 
@@ -240,95 +288,3 @@ class TrainingModule(pl.LightningModule):
       seq = batch[n].unsqueeze(0)
       key = f"{self.log}/{name}_{n}"
       tensorboard_logger.add_video(key, seq, self.global_step)
-
-
-class TestModule(TrainingModule):
-
-  def __init__(self,
-               target_size=(375, 1242),
-               min_depth=1e-3,
-               max_depth=80.,
-               *args,
-               **kwargs):
-    super().__init__(*args, **kwargs)
-
-    self.target_size = target_size
-    self.metric_names = [
-        "abs_rel", "sq_rel", "rmse", "rmse_log", "a1", "a2", "a3"
-    ]
-    self.min_depth = min_depth
-    self.max_depth = max_depth
-
-  def test_step(self, batch, batch_idx):
-    image, gt_depth = batch
-
-    # discard low-res depth estimates
-    *_, pred_idepth = self.depth_model(image)
-    assert pred_idepth.shape[-2:] == image.shape[-2:]
-
-    pred_depth, gt_depth = self.prepare_depth(pred_idepth, gt_depth)
-    metrics = self.compute_metrics(pred_depth, gt_depth)
-    return dict(zip(self.metric_names, metrics))
-
-  def test_epoch_end(self, outputs):
-    """ outputs is list of batches, batch is list of dicts:
-        outputs = [batch1 = [metric_b1_1 = {..}, metric_b1_2 = {..}, ..],
-                   batch2 = [metric_b2_1 = {..}, metric_b2_2 = {..}, ..], ..]
-    """
-    mean = lambda k: torch.stack([o[k] for o in outputs]).mean()
-    metrics = {"test/" + k: mean(k) for k in self.metric_names}
-    self.logger.log_metrics(metrics, step=self.global_step)
-
-    return metrics
-
-  def eigen_mask(self, gt_depth):
-    """ Return mask comparing prediction only at valid annotation pixels """
-
-    B, C, H, W = gt_depth.shape
-
-    # include valid gt pixel annotations
-    valid = torch.logical_and(self.min_depth < gt_depth,
-                              gt_depth < self.max_depth)
-
-    crop = torch.zeros_like(gt_depth)
-    top, bottom = int(0.40810811 * H), int(0.99189189 * H)
-    left, right = int(0.03594771 * W), int(0.96405229 * W)
-    crop[..., top:bottom, left:right] = 1
-
-    return torch.logical_and(valid, crop)
-
-  def prepare_depth(self, pred_idepth, gt_depth):
-    """ Prepare predicted depth for evaluation with gt_depth """
-
-    pred_depth = self.denormalize(pred_idepth)
-    pred_depth = transforms.functional.resize(pred_depth, self.target_size)
-    pred_depth.clamp_(self.min_depth, self.max_depth)
-
-    mask = self.eigen_mask(gt_depth)
-
-    pred_depth, gt_depth = pred_depth[mask], gt_depth[mask]
-
-    assert len(pred_depth) and len(gt_depth)
-
-    pred_depth *= torch.median(gt_depth) / torch.median(pred_depth)
-    return pred_depth, gt_depth
-
-  def compute_metrics(self, pred, gt):
-    """ Computation of error metrics between predicted and ground truth depths
-    """
-    thresh = torch.max((gt / pred), (pred / gt))
-    a1 = (thresh < 1.25).float().mean()
-    a2 = (thresh < 1.25**2).float().mean()
-    a3 = (thresh < 1.25**3).float().mean()
-
-    rmse = (gt - pred)**2
-    rmse = rmse.mean().sqrt()
-
-    rmse_log = (gt.log() - pred.log())**2
-    rmse_log = rmse_log.mean().sqrt()
-
-    abs_rel = ((gt - pred).abs() / gt).mean()
-
-    sq_rel = ((gt - pred).pow(2) / gt).mean()
-
-    return abs_rel, sq_rel, rmse, rmse_log, a1, a2, a3
