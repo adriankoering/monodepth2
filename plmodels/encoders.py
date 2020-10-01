@@ -16,6 +16,7 @@ class ResnetEncoder(nn.Module):
                context,
                pretrained,
                num_input_images=1,
+               downsampling=[True, True, True, True, True],
                *args,
                **kwargs):
     super().__init__()
@@ -34,6 +35,14 @@ class ResnetEncoder(nn.Module):
     self.layer2 = resnet.layer2
     self.layer3 = resnet.layer3
     self.layer4 = resnet.layer4
+
+    dilation = 1
+    for i, downsample in enumerate(downsampling):
+      # downsampling is default: refactor to remove
+      # removing it is not implemented for .layer{0, 1}
+      if i > 1 and not downsample:
+        dilation *= 2
+        self.remove_downsampling(getattr(self, f"layer{i}"), dilation)
 
     f0 = resnet.conv1.out_channels
     f1 = self._get_out_channels(resnet.layer1[-1])
@@ -68,6 +77,21 @@ class ResnetEncoder(nn.Module):
       new_conv = input_conv
 
     return new_conv
+
+  def remove_downsampling(self, module, dilation):
+    block0, *_ = module  # select first from any number of elements
+    block0.conv1.stride = (1, 1)  # remove downsampling via total_stride
+    block0.downsample[0].stride = (1, 1)
+
+    # dilate all conv-layers by 'dilation' to compensate for removing stride
+    def dilate(layer):
+      layer.padding = (dilation, dilation)
+      layer.dilation = (dilation, dilation)
+
+    for m in module:
+      for layer in m.children():
+        if isinstance(layer, nn.Conv2d):
+          dilate(layer)
 
   def _get_out_channels(self, module):
     out_channels = 0
