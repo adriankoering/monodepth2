@@ -82,7 +82,13 @@ class KittiTestModule(pl.LightningDataModule):
     self.image_size = image_size
 
   def setup(self, stage=None):
-    self.test_ds = KittiTestset(transform=preprocessing(self.image_size))
+    tfs = transforms.Compose([
+        # pytorch 1.6 does not yet support resize for tensors (1.6-nightly does)
+        transforms.ToPILImage(),
+        transforms.Resize(self.image_size),
+        transforms.ToTensor(),
+    ])
+    self.test_ds = KittiTestset(transform=tfs)  # SafeDataset()
     print(f"Test Examples: {len(self.test_ds)}")
 
   def test_dataloader(self):
