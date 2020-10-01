@@ -84,7 +84,11 @@ class KittiTestset(data.Dataset):
   def load_image(self, folder, frame_index, side):
     fname = f"{int(frame_index):010d}.{self.img_ext}"
     directoy = self.data_dir / folder / f"image_0{self.side_map[side]}/data"
-    return transforms.functional.to_tensor(Image.open(directoy / fname))
+    try:
+      return transforms.functional.to_tensor(Image.open(directoy / fname))
+    except Exception as e:
+      print(e)
+      raise e
 
   def load_depth(self, folder, frame_index, side):
     calib_dir = self.data_dir / Path(folder).parent
@@ -92,7 +96,11 @@ class KittiTestset(data.Dataset):
     velo_dir = self.data_dir / folder / "velodyne_points/data"
     velo_fname = velo_dir / f"{int(frame_index):010d}.bin"
 
-    depth = generate_depth_map(calib_dir, velo_fname, cam=self.side_map[side])
+    try:
+      depth = generate_depth_map(calib_dir, velo_fname, cam=self.side_map[side])
+    except Exception as e:
+      print(e)
+      raise e
 
     depth = resize(
         depth, self.target_shape, order=0, mode='constant', preserve_range=True)
