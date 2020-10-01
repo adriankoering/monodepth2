@@ -1,5 +1,4 @@
 
-model: MonoDepth2
 dataset: Kitti
 split: eigen_zhou
 
@@ -8,9 +7,9 @@ batch_size: 12
 image_size: [128, 416]
 
 # Model
-depthmodel: DeepLab
-backbone: resnet50
-context: md2 # one of [md2 (none), aspp, psp]
+depthmodel: Dorn
+backbone: resnet18
+context: Null # one of [Null, aspp, psp]
 pyramid: Null
 regression: True
 
