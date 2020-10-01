@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytorch_lightning as pl
 
-import plmodels as models
+from plmodels import TrainingModule as Model
 import pldatasets as datasets
 
 # import os
@@ -32,7 +32,6 @@ def parse_arguments():
 
 ARGS = parse_arguments()
 
-Model = getattr(models, ARGS.hparams.pop("model"))
 Dataset = getattr(datasets, ARGS.hparams.pop("dataset") + "DaliModule")
 
 
