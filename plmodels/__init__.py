@@ -1,2 +1,2 @@
-from plmodels.monodepth import MonoDepth2
+from plmodels.trainingmodule import TrainingModule
 from plmodels import contextmodules, depthmodules
