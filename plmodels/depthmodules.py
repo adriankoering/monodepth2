@@ -30,14 +30,9 @@ class DecoderLayer(nn.Module):
       self.upsample = nn.Identity()
 
     if output:
-      if regression:
-        self.output = nn.Conv2d(out_channels, 1, **kwargs)
-      else:
-        self.output = nn.Sequential(
-            nn.Conv2d(out_channels, 80, **kwargs),
-            SoftChannelArgmax(),
-            ReverseSID(),
-        )
+      regression_channels = 1 if regression else 80
+      self.output = nn.Conv2d(out_channels, regression_channels, **kwargs)
+
     else:
       self.output = None
 
@@ -80,34 +75,6 @@ class MonoDepth2(nn.Module):
     _, o0 = self.upconv0(x)
 
     return o3, o2, o1, o0  # high-res last (for visualization)
-
-
-class SoftChannelArgmax(nn.Module):
-
-  def forward(self, x, a=80.0):
-    B, C, H, W = x.shape
-
-    # scale factor 'a' causes the distribution to be more unimodal
-    probs = F.softmax(a * x, dim=1)
-    indices = torch.arange(B).view(1, B, 1, 1).float()
-
-    # multiply, accumulate along channel dimension
-    return F.conv2d(probs, indices)  # B, 1, H, W
-
-
-class ReverseSID(nn.Module):
-
-  def __init__(self, gamma=80, beta=1.):
-    self.gamma = gamma
-    self.logbeta = torch.tensor(beta).log()
-
-  def forward(self, labels):
-
-    t0 = (self.logbeta * labels / self.ord_num).exp()
-    t1 = (self.logbeta * (labels + 1) / self.ord_num).exp()
-
-    depth = 0.5 * (t0 + t1) - self.gamma
-    return depth
 
 
 class Dorn(nn.Module):

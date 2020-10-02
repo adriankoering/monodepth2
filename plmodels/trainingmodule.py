@@ -152,9 +152,51 @@ class TrainingModule(TestModule):
     B, C, H, W = idepth.shape
     return F.interpolate(image, size=[H, W], mode="area")
 
+  def ordinaldepth(self, x, unimodal=80., min_depth=0.01, max_depth=100.):
+
+    # soft channel-wise argmax
+    B, C, H, W = x.shape
+
+    # scale factor 'unimodal' causes the distribution to be more unimodal
+    probs = F.softmax(unimodal * x, dim=1)
+    indices = torch.arange(C, dtype=x.dtype, device=x.device).view(1, C, 1, 1)
+
+    # multiply, accumulate along channel dimension
+    labels = F.conv2d(probs, indices)  # B, 1, H, W
+
+    # logarithmic scaling
+    gamma = 1 - min_depth
+    a, b = min_depth + gamma, max_depth + gamma
+    loglength = torch.tensor(b / a).log()
+
+    t0 = (loglength * labels / C).exp()
+    t1 = (loglength * (labels + 1) / C).exp()
+
+    depth = (t0 + t1) / 2 - gamma
+
+    return depth
+
+  def disentangle(self, idepth):
+    """ idepth might represent continuous inverse or ordinal regression
+        split this into depth and idepth
+    """
+
+    B, C, H, W = idepth.shape
+    if C == 1:  # idepth is really inverse depth
+      depth = self.denormalize(idepth)
+      return depth, idepth
+    else:  # idepth is actually ordinal regression output
+      depth = self.ordinaldepth(idepth)
+      idepth = self.invert(depth)
+      return depth, idepth
+
   def denormalize(self, idepth, a=10, b=0.01):
     """ Scale predicted inverse depth into depth for projection """
     return 1 / (a * idepth + b)
+
+  def invert(self, depth, a=10., b=0.01):
+    """ Invert predicted ordinal depth into idepth for smoothness """
+    return ((1 / depth) - b) / a
 
   def photometric_error(self, img0, img1, alpha=0.85):
     """ Compute photometric error (ssim + l1) between images: returns BxHxW """
@@ -210,7 +252,10 @@ class TrainingModule(TestModule):
       # iterate over adjacent images and transform
       for Ia, Ta in [[Iprev, Tprev], [Inext, Tnext]]:
 
-        depth = self.upsample_like(self.denormalize(idepth), Ic)
+        # idepth might stem from ordinal or (conventional / inverse) regression
+        depth, idepth = self.disentangle(idepth)
+
+        depth = self.upsample_like(depth, Ic)
         Rc = self.reproject(depth, Ia, Ta, K)
         Lrecon, Lbase, Lsmooth = self.loss_fn(Rc, Ic, Ia, idepth)
         recons.append(Rc)
