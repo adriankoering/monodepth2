@@ -9,9 +9,9 @@ image_size: [128, 416]
 # Model
 depthmodel: Dorn
 backbone: resnet18
-context: aspp # one of [Null, aspp, psp]
-pyramid: [6, 12, 18] # TODO ?
-regression: True
+context: ASPP # one of [Null, Dorn, ASPP, PSP]
+pyramid: [2, 6] # [2, 4, 8]
+regression: False
 
 # Training
 max_epochs: 20
