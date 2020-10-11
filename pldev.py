@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+# Added by Adrian Köring
+
 import yaml
 import argparse
 from pathlib import Path

@@ -1,3 +1,5 @@
+# Added by Adrian Köring
+
 import pytorch_lightning as pl
 
 import torch
