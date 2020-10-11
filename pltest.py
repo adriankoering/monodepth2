@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytorch_lightning as pl
 
-from plmodels import MonoDepth2 as Model
+from plmodels import TrainingModule as Model
 from pldatasets import KittiTestModule as Dataset
 
 

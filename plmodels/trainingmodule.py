@@ -39,7 +39,8 @@ class TestModule(pl.LightningModule):
     *_, pred_idepth = self.depth_model(image)
     assert pred_idepth.shape[-2:] == image.shape[-2:]
 
-    pred_depth, gt_depth = self.prepare_depth(pred_idepth, gt_depth)
+    pred_depth, pred_idepth = self.disentangle(pred_idepth)
+    pred_depth, gt_depth = self.prepare_depth(pred_depth, gt_depth)
     metrics = self.compute_metrics(pred_depth, gt_depth)
     return dict(zip(self.metric_names, metrics))
 
@@ -70,10 +71,9 @@ class TestModule(pl.LightningModule):
 
     return torch.logical_and(valid, crop)
 
-  def prepare_depth(self, pred_idepth, gt_depth):
+  def prepare_depth(self, pred_depth, gt_depth):
     """ Prepare predicted depth for evaluation with gt_depth """
 
-    pred_depth = self.denormalize(pred_idepth)
     pred_depth = F.interpolate(pred_depth, self.target_size)
     pred_depth.clamp_(self.min_depth, self.max_depth)
 
