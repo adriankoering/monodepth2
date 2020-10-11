@@ -58,6 +58,7 @@ def main():
       weights_save_path="ckpts",
       terminate_on_nan=True,
       profiler=True,
+      # accumulate_grad_batches=2,  # with batch_size = 6
       # resume_from_checkpoint="ckpts/rn18lowressmooth_depth-estimation/1_170hdqox/checkpoints/epoch=3.ckpt"
   )
 
