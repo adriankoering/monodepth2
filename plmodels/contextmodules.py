@@ -13,6 +13,7 @@ class ASPP(nn.Module):
                pyramid=[2, 4, 8],
                *args,
                **kwargs):
+    """ Add context features via atrous convolutions """
     super().__init__()
 
     l0, l1 = pyramid
@@ -25,6 +26,7 @@ class ASPP(nn.Module):
     self.bn1 = nn.BatchNorm2d(out_channels)
 
   def forward(self, x):
+    """ Computes two levels of aspp and concat's features to the input """
 
     o0 = self.bn0(self.cn0(x)).relu()
     o1 = self.bn1(self.cn1(x)).relu()
@@ -35,6 +37,8 @@ class ASPP(nn.Module):
 class PSP(nn.Module):
 
   def __init__(self, in_channels, out_channels, pyramid, *args, **kwargs):
+    """ Add context features via average pooling """
+
     super().__init__()
 
     p2, p1 = pyramid
@@ -55,6 +59,8 @@ class PSP(nn.Module):
     )
 
   def forward(self, x):
+    """ Computes two levels of psp and concat's features to the input """
+
     B, C, H, W = x.shape
 
     o2 = F.interpolate(

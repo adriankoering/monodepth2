@@ -14,6 +14,14 @@ from nvidia.dali.plugin.pytorch import DALIGenericIterator
 
 
 def collate_fn(batch):
+  """ Batch torch.Dataset the same as DALI does: unifies input into model
+
+      Args:
+        batch: list of example sequence: [(prev, center, next), ...]
+
+      Returns:
+        batch: single-element list of dict containing all prevs, centers and nexts
+  """
   prevs, centers, nexts = [], [], []
   for (prev, center, next) in batch:
     prevs.append(prev)
@@ -27,10 +35,6 @@ def collate_fn(batch):
   }]
 
 
-def preprocessing(image_size):
-  return transforms.Resize(image_size)
-
-
 class KittiDataModule(pl.LightningDataModule):
 
   def __init__(self, split, image_size, batch_size, *args, **kwargs):
@@ -40,7 +44,11 @@ class KittiDataModule(pl.LightningDataModule):
     self.image_size = image_size
     self.batch_size = batch_size
 
+  def preprocessing(self):
+    return transforms.Resize(self.image_size)
+
   def setup(self, stage=None):
+    # wrap KittiDataset in SafeDataset to resample corrupt input images
     self.train_ds = SafeDataset(
         KittiDataset(
             self.split,
@@ -55,7 +63,7 @@ class KittiDataModule(pl.LightningDataModule):
             transform=self.preprocessing(),
         ))
     num_examples = len(self.train_ds), len(self.val_ds)
-    print(f"Train/Val/Test Examples: {num_examples}")
+    print(f"Train/Val Examples: {num_examples}")
 
   def train_dataloader(self):
     return data.DataLoader(
@@ -90,7 +98,9 @@ class KittiTestModule(pl.LightningDataModule):
         transforms.Resize(self.image_size),
         transforms.ToTensor(),
     ])
-    self.test_ds = KittiTestset(transform=tfs)  # SafeDataset()
+
+    # no SafeDataset() here, because we dont want data to be skipped silently
+    self.test_ds = KittiTestset(transform=tfs)
     print(f"Test Examples: {len(self.test_ds)}")
 
   def test_dataloader(self):
@@ -105,6 +115,9 @@ class KittiTestModule(pl.LightningDataModule):
 class IteratorLengthWrapper:
 
   def __init__(self, pipe, output_map=["prev", "center", "next"]):
+    """ Wrap DALIGenericIterator to support __len__
+        (enables tqdm (progressbar) to show remaining time)
+    """
     self.pipe = pipe
     self.outputs = output_map
 
@@ -118,6 +131,9 @@ class IteratorLengthWrapper:
 class KittiDaliModule(pl.LightningDataModule):
 
   def __init__(self, split, image_size, batch_size, *args, **kwargs):
+    """ TFRecord based input pipeline (used for training / validation) based on
+        nvidia DALI.
+    """
     super().__init__()
 
     self.split = split

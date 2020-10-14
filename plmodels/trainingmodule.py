@@ -25,6 +25,7 @@ class TestModule(pl.LightningModule):
                max_depth=80.,
                *args,
                **kwargs):
+    """ Implements test-loop conforming to pytorch-lightning """
     super().__init__()
 
     self.target_size = target_size
@@ -112,6 +113,7 @@ class TestModule(pl.LightningModule):
 class TrainingModule(TestModule):
 
   def __init__(self, depthmodel, image_size, crop_size, *args, **kwargs):
+    """ Implements training-loop conforming to pytorch-lightning """
     super().__init__(*args, **kwargs)
     self.save_hyperparameters()
     self.ssim = losses.SSIM()
@@ -147,14 +149,17 @@ class TrainingModule(TestModule):
     return x["prev"], x["center"], x["next"]
 
   def upsample_like(self, idepth, image):
+    """ Upsample idepth to image size """
     B, C, *size = image.shape
     return F.interpolate(idepth, size=size, mode="nearest")
 
-  def downsample(self, image, idepth):
-    B, C, H, W = idepth.shape
-    return F.interpolate(image, size=[H, W], mode="area")
+  def downsample_like(self, image, idepth):
+    """ Downsample image to idepth size """
+    B, C, *size = idepth.shape
+    return F.interpolate(image, size=size, mode="area")
 
-  def ordinaldepth(self, x, unimodal=80., min_depth=0.01, max_depth=100.):
+  def ordinaldepth(self, x, unimodal=80., min_depth=0.1, max_depth=100.):
+    """ Compute depth from ordinal prediction """
 
     # soft channel-wise argmax
     B, C, H, W = x.shape
@@ -179,8 +184,8 @@ class TrainingModule(TestModule):
     return depth
 
   def disentangle(self, idepth):
-    """ idepth might represent continuous inverse or ordinal regression
-        split this into depth and idepth
+    """ idepth might represent continuous inverse or ordinal regression output.
+        Here we split the output into depth and idepth prediction
     """
 
     B, C, H, W = idepth.shape
@@ -209,9 +214,10 @@ class TrainingModule(TestModule):
   def smoothness_loss(self, idepth, image, lam=1e-3):
     """ Compute image-edge-aware smoothness of inverse depth: returns BxHxW """
     norm_idepth = idepth / F.adaptive_avg_pool2d(idepth, (1, 1))
-    image = self.downsample(image, idepth)
+    image = self.downsample_like(image, idepth)
     Lsmooth = losses.inverse_depth_smoothness_loss(norm_idepth, image)
 
+    # downscale loss by scale difference between low-res and high-res estimates
     (B, C, Hd, Wd), (_, _, Hi, Wi) = idepth.shape, image.shape
     scale = Hd // Hi
 
@@ -240,11 +246,14 @@ class TrainingModule(TestModule):
     return geometry.warp_frame_depth(image, depth, T, K, padding_mode="border")
 
   def step(self, images):
+    """ Unified step between training and validation """
     Iprev, Ic, Inext = self.unpack(images)
 
+    # crop if specified in config, otherwise yield images untouched + intrinsics
     Iprev, Ic, Inext, K = self.crop(Iprev, Ic, Inext)
     images = torch.stack([Iprev, Ic, Inext], dim=1)
 
+    # predict depth and poses towards adjacent frames
     idepths, Tprev, Tnext = self(Iprev, Ic, Inext)
 
     scale_losses = []
@@ -305,6 +314,7 @@ class TrainingModule(TestModule):
     return {"val_loss": loss}
 
   def log_images(self, idepths, images):
+    """ Log images for tensorboard """
     *_, tensorboard_logger = self.logger.experiment
 
     for n in range(min(4, len(images))):
@@ -329,6 +339,7 @@ class TrainingModule(TestModule):
       tensorboard_logger.add_figure(key, fig, self.global_step)
 
   def log_sequence(self, batch, name="images"):
+    """ Log reconstructions and observed image looping as gif """
     *_, tensorboard_logger = self.logger.experiment
 
     for n in range(min(4, len(batch))):

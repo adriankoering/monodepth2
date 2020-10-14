@@ -25,16 +25,21 @@ class ResnetEncoder(nn.Module):
         std=torch.tensor(num_input_images * [0.229, 0.224, 0.225]),
     )
 
+    # instanciate pretrained resnet
     resnet = getattr(models, backbone)(pretrained=pretrained)
 
+    # re-build first conv layer to accept 'num_input' images
     input_conv = self._adapt_first_input(resnet.conv1, num_input_images)
 
+    # re-package resnet into five layers
     self.layer0 = nn.Sequential(normalize, input_conv, resnet.bn1, resnet.relu)
     self.layer1 = nn.Sequential(resnet.maxpool, resnet.layer1)
     self.layer2 = resnet.layer2
     self.layer3 = resnet.layer3
     self.layer4 = resnet.layer4
 
+    # replace downsampling stride with dilations
+    # (keeping track of dilation factor already applied)
     dilation = 1
     for i, downsample in enumerate(downsampling):
       # downsampling is default: refactor to remove
@@ -52,6 +57,7 @@ class ResnetEncoder(nn.Module):
     self.out_channels = [f0, f1, f2, f3, f4]
 
   def _adapt_first_input(self, input_conv, num_input_images):
+    """ Modify 'input_conv' to accept 'num_input_images' (with pretrained weights) """
 
     if num_input_images > 1:
 
@@ -75,6 +81,7 @@ class ResnetEncoder(nn.Module):
     return new_conv
 
   def remove_downsampling(self, module, dilation):
+    """ Modify 'module' by replacing stride=2 with unit-stride and dilation """
     block0, *_ = module  # select first from any number of elements
     block0.conv1.stride = (1, 1)  # remove downsampling via total_stride
     block0.downsample[0].stride = (1, 1)
@@ -90,6 +97,7 @@ class ResnetEncoder(nn.Module):
           dilate(layer)
 
   def _get_out_channels(self, module):
+    """ Return number of features channels produced by 'module' """
     out_channels = 0
     for m in module.children():
       try:

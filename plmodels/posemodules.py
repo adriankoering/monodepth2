@@ -12,6 +12,7 @@ from .encoders import ResnetEncoder as ResNet
 class PoseModule(nn.Module):
 
   def __init__(self, *args, **kwargs):
+    """ Re-implement pose model matching reference """
     super().__init__()
     self.encoder = ResNet(pretrained=True, num_input_images=2, *args, **kwargs)
 

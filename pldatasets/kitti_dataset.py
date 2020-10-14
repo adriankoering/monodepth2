@@ -21,6 +21,7 @@ class KittiDataset(data.Dataset):
                transform=None,
                data_dir="kitti_data",
                image_extension="png"):
+    """ Pytorch Dataset loading Kitti """
     super().__init__()
 
     self.data_dir = Path(data_dir)
@@ -41,11 +42,13 @@ class KittiDataset(data.Dataset):
     return images
 
   def load_sequence(self, folder, index, side):
+    """ Given an image load the entire sequence (+/- adjacent)"""
     images = [self.load_image(folder, int(index) + o, side) for o in [-1, 0, 1]]
     return torch.stack(images, dim=0)
 
   @lru_cache(2048)
   def load_image(self, folder, frame_index, side):
+    """ Concatenate info about the specified image to load it (with cache) """
     fname = f"{frame_index:010d}.{self.img_ext}"
     directoy = self.data_dir / folder / f"image_0{self.side_map[side]}/data"
     return transforms.functional.to_tensor(Image.open(directoy / fname))
@@ -84,6 +87,7 @@ class KittiTestset(data.Dataset):
     return image, depth
 
   def load_image(self, folder, frame_index, side):
+    """ Concatenate info about the specified image to load it"""
     fname = f"{int(frame_index):010d}.{self.img_ext}"
     directoy = self.data_dir / folder / f"image_0{self.side_map[side]}/data"
     try:
@@ -93,6 +97,7 @@ class KittiTestset(data.Dataset):
       raise e
 
   def load_depth(self, folder, frame_index, side):
+      """ Concatenate info about the specified image to load respective depth """
     calib_dir = self.data_dir / Path(folder).parent
 
     velo_dir = self.data_dir / folder / "velodyne_points/data"
@@ -106,8 +111,5 @@ class KittiTestset(data.Dataset):
 
     depth = resize(
         depth, self.target_shape, order=0, mode='constant', preserve_range=True)
-
-    # import numpy as np
-    # Image.fromarray(depth.astype(np.uint8)).save("gtdepth.png")
 
     return torch.from_numpy(depth).unsqueeze(0).to(torch.float32)

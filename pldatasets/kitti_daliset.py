@@ -24,6 +24,7 @@ class KittiTFRecordPipeline(Pipeline):
                batch_size=12,
                num_threads=4,
                device_id=0):
+    """ Load a tfrecord (with shuffle, preprocessing, augmentation) """
     super().__init__(batch_size, num_threads, device_id)
 
     mode = "train" if train else "val"
@@ -33,6 +34,7 @@ class KittiTFRecordPipeline(Pipeline):
     if not indexfile.exists():
       call(["tfrecord2idx", str(tfrecordfile), str(indexfile)])
 
+    # read tfrecord and extract sequence (prev, center, next (jpeg-encoded))
     self.input = ops.TFRecordReader(
         path=str(tfrecordfile),
         index_path=str(indexfile),
@@ -45,8 +47,10 @@ class KittiTFRecordPipeline(Pipeline):
         prefetch_queue_depth=3,
         initial_fill=1024,
         read_ahead=True)
+    # decode sequence image-wise with help from gpu
     self.decode = ops.ImageDecoder(device="mixed", output_type=types.RGB)
 
+    # augment images
     image_size = np.array(image_size).astype(np.float32).tolist()
     self.resize = ops.Resize(device="gpu", size=image_size)
 
@@ -66,6 +70,7 @@ class KittiTFRecordPipeline(Pipeline):
     images = [self.decode(x) for x in images]
     images = [self.resize(x) for x in images]
 
+    # augmentation uses the same parameter for each sequence element
     h, s, v = self.hue_rng(), self.sat_rng(), self.val_rng()
     images = [self.hsv(x, hue=h, saturation=s, value=v) for x in images]
 

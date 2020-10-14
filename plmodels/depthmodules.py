@@ -18,6 +18,7 @@ class DecoderLayer(nn.Module):
                upsampling=True,
                output=True,
                regression=True):
+    """ Decode Block containing upsampling, skip-connection, output """
     super().__init__()
     kwargs = {"kernel_size": 3, "padding": 1, "padding_mode": "reflect"}
 
@@ -32,13 +33,14 @@ class DecoderLayer(nn.Module):
       self.upsample = nn.Identity()
 
     if output:
-      regression_channels = 1 if regression else 80
+      regression_channels = 1 if regression else 80  # 80 == reported optimimum
       self.output = nn.Conv2d(out_channels, regression_channels, **kwargs)
 
     else:
       self.output = None
 
   def forward(self, x, skip=None):
+    """ Upsample input, add skip connection and return features + output """
     x = F.elu(self.b0(self.c0(x)))
     x = self.upsample(x)
 
@@ -54,9 +56,10 @@ class DecoderLayer(nn.Module):
 class MonoDepth2(nn.Module):
 
   def __init__(self, regression, *args, **kwargs):
+    """ Glue Encoder and Decoder together following reference design """
     super().__init__()
 
-    ds = 5 * [True]
+    ds = 5 * [True]  # downsample in every encoder step
     self.encoder = ResNet(pretrained=True, downsampling=ds, *args, **kwargs)
     f0, f1, f2, f3, f4 = self.encoder.out_channels
 
@@ -82,6 +85,7 @@ class MonoDepth2(nn.Module):
 class Dorn(nn.Module):
 
   def __init__(self, context, regression, *args, **kwargs):
+    """ Modify MonoDepth2 with Dense Prediction Encoder and Decoder """
     super().__init__()
 
     ds = [True, True, True, True, False]  # dont downsample last layer
@@ -90,6 +94,7 @@ class Dorn(nn.Module):
     f0, f1, f2, f3, f4 = self.encoder.out_channels
     u0, u1, u2, u3, u4 = ds
 
+    # fetch (and instanciate) the context module specified in config.yaml
     self.context = getattr(contextmodules, context)(f4, 128, *args, **kwargs)
 
     # skip upconv without downsampling

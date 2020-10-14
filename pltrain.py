@@ -21,6 +21,7 @@ import pldatasets as datasets
 def parse_arguments():
   parser = argparse.ArgumentParser()
 
+  # specify config and name to log run with
   parser.add_argument("-c", "--config", type=Path, required=True)
   parser.add_argument("-n", "--name", type=str, required=True)
 

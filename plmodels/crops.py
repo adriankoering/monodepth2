@@ -8,16 +8,19 @@ from kornia import augmentation
 class NoCrop(nn.Module):
 
   def __init__(self, image_size):
+    """ Add camera intrinsics to unaltered images """
     super().__init__()
 
     self.image_size = image_size
     H, W = image_size
 
+    # canonical intrinsics as used in reference (to be scaled by image size)
     self.K = torch.tensor([[0.58, 0, 0.5], [0, 1.92, 0.5], [0, 0, 1.]])
     self.K[0] *= W
     self.K[1] *= H
 
   def stacked_K(self, B):
+    """ Add batch dimension to intrinsics"""
     return torch.stack(B * [self.K])
 
   def forward(self, Iprev, Ic, Inext):
@@ -28,11 +31,15 @@ class NoCrop(nn.Module):
 class RandomCrop(NoCrop):
 
   def __init__(self, image_size, crop_size, p=0.5):
+    """ Crop images (uniform across sequence) and return matching intrinsics """
     super().__init__(image_size)
     self.crop_size = crop_size
     self.p = p
 
   def apply_crop(self, Ks, params):
+    """ Apply crop to camera intrinsics
+        (subtracts top-left crop corner from principal point)
+    """
     src = params["src"]
 
     LT = src[:, 0]  # left, top corner
@@ -42,6 +49,7 @@ class RandomCrop(NoCrop):
     return Ks
 
   def forward(self, Iprev, Ic, Inext):
+    """ Apply crops and adjust intrinsics during training """
 
     if not self.training or torch.rand([]) < self.p:
       # Random crop only augments training
